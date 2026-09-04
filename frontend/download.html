@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SecureDrop - Manual Lookup</title>
+<link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+
+<div id="sd-navbar" class="navbar"></div>
+
+<main class="container-narrow" style="padding-top:32px; padding-bottom:32px">
+
+  <div class="card">
+    <h2 class="mt-0">Manual file lookup</h2>
+    <p class="text-muted small">Don't have a full link? Enter the File ID and its decryption key or passphrase.</p>
+
+    <div class="form-group">
+      <label for="fileIdInput">File ID<span class="info-icon" tabindex="0">i<span class="info-tooltip">The identifier from the share link, e.g. the part after /share/ and before the # in https://.../share/&lt;file_id&gt;#&lt;key&gt;.</span></span></label>
+      <input type="text" id="fileIdInput" placeholder="e.g. 3f9c1a2b-...">
+    </div>
+    <div class="form-group">
+      <label for="secretInput">Decryption key or passphrase<span class="info-icon" tabindex="0">i<span class="info-tooltip">If the link had a #key fragment, paste that here. If the uploader instead set a passphrase, enter that passphrase - the file itself tells us which kind it needs once you look it up.</span></span></label>
+      <input type="text" id="secretInput" placeholder="Paste the key, or enter the passphrase">
+    </div>
+
+    <div id="metaInfo" class="small text-muted mb-2"></div>
+
+    <div id="progressWrap" class="mt-2" style="display:none">
+      <div class="progress"><div class="progress-bar" id="progressBar" style="width:60%"></div></div>
+      <div class="small text-muted mt-1" id="progressLabel"></div>
+    </div>
+
+    <button class="btn btn-primary btn-block" id="lookupBtn">Decrypt &amp; Download</button>
+  </div>
+</main>
+
+<footer class="app-footer" id="sd-footer"></footer>
+
+<script src="/static/js/theme.js"></script>
+<script src="/static/js/api.js"></script>
+<script src="/static/js/layout.js"></script>
+<script src="/static/js/toast.js"></script>
+<script src="/static/js/tooltip.js"></script>
+<script src="/static/js/crypto.js"></script>
+<script src="/static/js/download-common.js"></script>
+<script src="/static/js/download-portal.js"></script>
+</body>
+</html>

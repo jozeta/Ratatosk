@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SecureDrop - Shared With Me</title>
+<link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+
+<div id="sd-navbar" class="navbar"></div>
+
+<main class="container" style="padding-top:32px; padding-bottom:32px">
+  <div id="content" style="display:none">
+    <div class="card">
+      <div class="card-header">
+        <h2 class="mt-0 mb-0">Shared With Me</h2>
+      </div>
+      <p class="small text-muted mt-0">Files other accounts have shared with you directly. You can decrypt these just by being logged in - no link or passphrase needed.</p>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>Size</th><th>Shared by</th><th>Shared with</th><th>Expires</th><th>Downloads</th><th></th></tr>
+          </thead>
+          <tbody id="sharedTableBody"></tbody>
+        </table>
+      </div>
+      <p class="text-muted small mt-2" id="emptyState" style="display:none">No files have been shared with you.</p>
+    </div>
+  </div>
+</main>
+
+<footer class="app-footer" id="sd-footer"></footer>
+
+<script src="/static/js/theme.js"></script>
+<script src="/static/js/api.js"></script>
+<script src="/static/js/layout.js"></script>
+<script src="/static/js/toast.js"></script>
+<script src="/static/js/crypto.js"></script>
+<script src="/static/js/download-common.js"></script>
+<script src="/static/js/shared-with-me.js"></script>
+</body>
+</html>

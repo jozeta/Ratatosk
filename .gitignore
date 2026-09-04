@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Environment / secrets
+.env
+*.env.local
+
+# Database
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Runtime storage (encrypted blobs and in-progress uploads must never be committed)
+storage/encrypted/*
+storage/tmp/*
+storage/branding/*
+!storage/encrypted/.gitkeep
+!storage/tmp/.gitkeep
+!storage/branding/.gitkeep
+
+# Docker volume mount target
+data/
+
+# Logs
+*.log
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

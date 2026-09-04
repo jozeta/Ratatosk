@@ -1,0 +1,467 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SecureDrop - Admin Settings</title>
+<link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+
+<div id="sd-navbar" class="navbar"></div>
+
+<main class="container-wide" style="padding-top:32px; padding-bottom:32px">
+  <h2 class="mt-0">Admin Configuration</h2>
+  <p class="text-muted small mb-3">Changes save directly to the database and apply across the app immediately - no restart required.</p>
+
+  <div class="settings-shell">
+    <nav class="settings-nav" id="settingsNav">
+      <button type="button" class="settings-nav-item" data-target="general">General</button>
+      <button type="button" class="settings-nav-item" data-target="access">Access &amp; Authentication</button>
+      <button type="button" class="settings-nav-item" data-target="admin-features">Admin Features</button>
+      <button type="button" class="settings-nav-item" data-target="uploads">Uploads &amp; Storage</button>
+      <button type="button" class="settings-nav-item" data-target="privacy">Privacy &amp; Audit</button>
+      <button type="button" class="settings-nav-item" data-target="appearance">Appearance</button>
+      <button type="button" class="settings-nav-item" data-target="email">Email</button>
+      <button type="button" class="settings-nav-item" data-target="danger-zone" style="color:var(--danger)">Danger Zone</button>
+    </nav>
+
+    <div class="settings-panels">
+
+      <section class="settings-panel" data-panel="general" hidden>
+        <div class="grid grid-2">
+          <div class="card" style="max-width:560px">
+            <h3 class="mt-0">Branding</h3>
+            <div class="branding-row">
+              <div class="branding-preview">
+                <div class="logo-preview" id="logoPreviewWrap">
+                  <img id="logoPreviewImg" alt="" hidden>
+                  <svg id="logoPreviewDefault" width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.6"/>
+                    <path d="M8 11V7.5a4 4 0 0 1 8 0V11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                    <circle cx="12" cy="15.5" r="1.4" fill="currentColor"/>
+                  </svg>
+                </div>
+                <div>
+                  <div class="branding-preview-name" id="brandPreviewName">SecureDrop</div>
+                  <div class="text-muted small">Preview of the top-left mark</div>
+                </div>
+              </div>
+              <div class="branding-controls">
+                <input type="file" id="logoFileInput" accept="image/png,image/jpeg,image/webp,image/svg+xml,image/x-icon" hidden>
+                <button type="button" class="btn btn-outline btn-sm" id="logoUploadBtn">Upload logo</button>
+                <button type="button" class="btn btn-outline btn-sm" id="logoRemoveBtn">Remove logo</button>
+                <div class="form-hint mt-1">PNG, JPEG, WebP, SVG, or ICO — max 2MB. Replaces the icon in the top-left corner; the brand name still appears alongside it.</div>
+              </div>
+            </div>
+            <div class="form-group mt-2 mb-0">
+              <label>Brand name<span class="info-icon" tabindex="0">i<span class="info-tooltip">Shown next to the logo in the top-left corner of every page, and in the browser tab title.</span></span></label>
+              <input type="text" id="brand_name" maxlength="64">
+            </div>
+            <div class="form-group mb-0 mt-2">
+              <label>Footer text<span class="info-icon" tabindex="0">i<span class="info-tooltip">Shown at the bottom of every page. Keep it short - it's not a place for long legal text.</span></span></label>
+              <textarea id="footer_text" rows="2" maxlength="512"></textarea>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="settings-panel" data-panel="access" hidden>
+        <div class="grid grid-2">
+          <div class="card">
+            <h3 class="mt-0">Access &amp; Authentication</h3>
+            <div class="switch-row">
+              <div><div class="label">Anonymous uploading<span class="info-icon" tabindex="0">i<span class="info-tooltip">Lets visitors encrypt and upload a file without creating an account. Turn off to require login before anyone can upload.</span></span></div><div class="desc">Allow drop-and-go uploads without an account</div></div>
+              <label class="switch"><input type="checkbox" id="allow_anonymous_upload"><span class="slider"></span></label>
+            </div>
+            <div class="switch-row">
+              <div><div class="label">Anonymous downloading<span class="info-icon" tabindex="0">i<span class="info-tooltip">Lets anyone with a share link decrypt and download the file without logging in. Turn off to force login before any download - useful if you want every download traceable to an account.</span></span></div><div class="desc">Allow public link access without login (off = force login before download)</div></div>
+              <label class="switch"><input type="checkbox" id="allow_anonymous_download"><span class="slider"></span></label>
+            </div>
+            <div class="switch-row">
+              <div><div class="label">User registration<span class="info-icon" tabindex="0">i<span class="info-tooltip">Controls whether the public /register page accepts new sign-ups. Turn off for invite-only - an admin can still create accounts from User Management.</span></span></div><div class="desc">Public sign-ups vs. invite-only</div></div>
+              <label class="switch"><input type="checkbox" id="allow_user_registration"><span class="slider"></span></label>
+            </div>
+            <div class="switch-row">
+              <div><div class="label">User login<span class="info-icon" tabindex="0">i<span class="info-tooltip">Controls whether non-admin accounts can log in. Admins can always sign in, even when this is off - the /login page itself stays reachable, it's just removed from the navigation.</span></span></div><div class="desc">Off = only admins can log in (still reachable at /login directly)</div></div>
+              <label class="switch"><input type="checkbox" id="allow_user_login"><span class="slider"></span></label>
+            </div>
+            <div class="switch-row">
+              <div><div class="label">Allow secondary passphrase<span class="info-icon" tabindex="0">i<span class="info-tooltip">Lets uploaders set a passphrase at all. Turning this off removes the option entirely from the upload form and also turns off "Enforce" below, since there'd be nothing to enforce.</span></span></div><div class="desc">Show the passphrase option on the upload form</div></div>
+              <label class="switch"><input type="checkbox" id="allow_secondary_password"><span class="slider"></span></label>
+            </div>
+            <div class="switch-row">
+              <div><div class="label">Enforce secondary password<span class="info-icon" tabindex="0">i<span class="info-tooltip">Requires every uploader to set a passphrase. In this mode the encryption key is derived from the passphrase (PBKDF2) instead of a random key in the link, and the server rate-limits guesses against it.</span></span></div><div class="desc">Force uploaders to set a passphrase</div></div>
+              <label class="switch"><input type="checkbox" id="enforce_secondary_password"><span class="slider"></span></label>
+            </div>
+            <div class="switch-row">
+              <div><div class="label">User-to-user sharing<span class="info-icon" tabindex="0">i<span class="info-tooltip">Lets a logged-in uploader pick specific registered users to share a file with. Those users see it under "Shared With Me" and can decrypt it just by being logged in - no link or passphrase needed. Only available for files uploaded without a secondary passphrase, since the server never has that key. Recipients see who else the file was shared with and who shared it.</span></span></div><div class="desc">Allow sharing files directly with other accounts</div></div>
+              <label class="switch"><input type="checkbox" id="enable_user_sharing"><span class="slider"></span></label>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3 class="mt-0">Multi-Factor Authentication</h3>
+            <div class="switch-row">
+              <div><div class="label">Enable MFA<span class="info-icon" tabindex="0">i<span class="info-tooltip">Turns the two-factor authentication feature on or off site-wide. Off hides it everywhere (including the Profile page) and existing setups stop being prompted at login - they aren't deleted, just dormant.</span></span></div><div class="desc">Let users set up and use an authenticator app</div></div>
+              <label class="switch"><input type="checkbox" id="enable_mfa"><span class="slider"></span></label>
+            </div>
+            <div class="switch-row">
+              <div><div class="label">Require for regular users<span class="info-icon" tabindex="0">i<span class="info-tooltip">Non-admin accounts without MFA set up will be walked through setup immediately after their next successful password login, before they can do anything else.</span></span></div><div class="desc">Force MFA setup at next login</div></div>
+              <label class="switch"><input type="checkbox" id="enforce_mfa_users"><span class="slider"></span></label>
+            </div>
+            <div class="switch-row">
+              <div><div class="label">Require for admins<span class="info-icon" tabindex="0">i<span class="info-tooltip">Same as above, for admin accounts. Worth turning on independently of regular users, since admin accounts are the highest-value target.</span></span></div><div class="desc">Force MFA setup at next login</div></div>
+              <label class="switch"><input type="checkbox" id="enforce_mfa_admins"><span class="slider"></span></label>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3 class="mt-0">Login Security</h3>
+            <div class="switch-row">
+              <div><div class="label">Account login rate limiting<span class="info-icon" tabindex="0">i<span class="info-tooltip">Locks an account out for a while after too many wrong passwords in a row, to block brute-force guessing. Applies to every account, including admins. Uses the "Max login/password attempts" value from Privacy &amp; Audit.</span></span></div><div class="desc">Lock accounts out after repeated failed logins</div></div>
+              <label class="switch"><input type="checkbox" id="enable_login_rate_limit"><span class="slider"></span></label>
+            </div>
+            <div class="form-group mt-2 mb-0">
+              <label>Lockout duration (minutes)<span class="info-icon" tabindex="0">i<span class="info-tooltip">How long an account stays locked after too many failed attempts, before it can try again on its own.</span></span></label>
+              <input type="number" id="login_lockout_minutes" min="1">
+            </div>
+          </div>
+
+          <div class="card">
+            <h3 class="mt-0">Password Policy</h3>
+            <p class="small text-muted mt-0">Applied to registration, admin-created accounts, password resets, and self-service password changes.</p>
+            <div class="form-group"><label>Minimum length<span class="info-icon" tabindex="0">i<span class="info-tooltip">Shortest password length accepted anywhere in the app.</span></span></label><input type="number" id="password_min_length" min="1"></div>
+            <div class="switch-row">
+              <div><div class="label">Require uppercase letter<span class="info-icon" tabindex="0">i<span class="info-tooltip">Passwords must contain at least one A-Z character.</span></span></div></div>
+              <label class="switch"><input type="checkbox" id="password_require_uppercase"><span class="slider"></span></label>
+            </div>
+            <div class="switch-row">
+              <div><div class="label">Require lowercase letter<span class="info-icon" tabindex="0">i<span class="info-tooltip">Passwords must contain at least one a-z character.</span></span></div></div>
+              <label class="switch"><input type="checkbox" id="password_require_lowercase"><span class="slider"></span></label>
+            </div>
+            <div class="switch-row">
+              <div><div class="label">Require number<span class="info-icon" tabindex="0">i<span class="info-tooltip">Passwords must contain at least one digit (0-9).</span></span></div></div>
+              <label class="switch"><input type="checkbox" id="password_require_number"><span class="slider"></span></label>
+            </div>
+            <div class="switch-row">
+              <div><div class="label">Require special character<span class="info-icon" tabindex="0">i<span class="info-tooltip">Passwords must contain at least one non-alphanumeric character, e.g. ! @ # $ %.</span></span></div></div>
+              <label class="switch"><input type="checkbox" id="password_require_special"><span class="slider"></span></label>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="settings-panel" data-panel="admin-features" hidden>
+        <div class="card" style="max-width:560px">
+          <h3 class="mt-0">Admin Feature Views</h3>
+          <div class="switch-row">
+            <div><div class="label">User management<span class="info-icon" tabindex="0">i<span class="info-tooltip">Shows or hides the entire /admin/users page and its API. Turning it off blocks user CRUD even for admins who navigate there directly - a way to reduce attack surface when you don't need it.</span></span></div><div class="desc">Show/hide the User Management page entirely</div></div>
+            <label class="switch"><input type="checkbox" id="enable_user_management"><span class="slider"></span></label>
+          </div>
+          <div class="switch-row">
+            <div><div class="label">File management<span class="info-icon" tabindex="0">i<span class="info-tooltip">Shows or hides the entire /admin/files page and its API (viewing/deleting any file platform-wide). Turning it off blocks it even for admins who navigate there directly.</span></span></div><div class="desc">Show/hide the File Management page entirely</div></div>
+            <label class="switch"><input type="checkbox" id="enable_file_management"><span class="slider"></span></label>
+          </div>
+          <div class="switch-row">
+            <div><div class="label">API keys<span class="info-icon" tabindex="0">i<span class="info-tooltip">Lets logged-in users create API keys for scripted/CLI uploads (see /account and the cli/ folder). Turning this off immediately stops all existing keys from working too.</span></span></div><div class="desc">Allow API keys for CLI/scripted uploads</div></div>
+            <label class="switch"><input type="checkbox" id="enable_api_keys"><span class="slider"></span></label>
+          </div>
+        </div>
+      </section>
+
+      <section class="settings-panel" data-panel="uploads" hidden>
+        <div class="grid grid-2">
+          <div class="card">
+            <h3 class="mt-0">Upload &amp; File Constraints</h3>
+            <div class="form-group"><label>Max file size (MB)<span class="info-icon" tabindex="0">i<span class="info-tooltip">Largest single file accepted. Checked both in the browser before encryption and again on the server, since the encrypted blob is a little larger than the original file.</span></span></label><input type="number" id="max_file_size_mb" min="1"></div>
+            <div class="form-group"><label>Chunk size (MB)<span class="info-icon" tabindex="0">i<span class="info-tooltip">Size of each piece the browser splits an upload into. Smaller chunks are more resilient on flaky connections; larger chunks mean fewer HTTP requests.</span></span></label><input type="number" id="chunk_size_mb" min="1"></div>
+            <div class="form-group"><label>Max concurrent uploads<span class="info-icon" tabindex="0">i<span class="info-tooltip">How many uploads the same uploader (by account or anonymous session) can have in flight at once before new ones are rejected with a 429.</span></span></label><input type="number" id="max_concurrent_uploads" min="1"></div>
+            <div class="switch-row">
+              <div><div class="label">Multi-file / folder upload<span class="info-icon" tabindex="0">i<span class="info-tooltip">Lets the upload page accept more than one file at once (including whole folders dropped in), queuing and encrypting each one separately. Off restricts the page to one file at a time.</span></span></div><div class="desc">Allow selecting or dropping multiple files/folders</div></div>
+              <label class="switch"><input type="checkbox" id="enable_multi_file_upload"><span class="slider"></span></label>
+            </div>
+            <div class="form-group mt-2">
+              <label>Extension rule mode<span class="info-icon" tabindex="0">i<span class="info-tooltip">Blacklist blocks only the listed extensions (everything else is allowed). Whitelist allows only the listed extensions (everything else is blocked).</span></span></label>
+              <select id="extension_rule_mode"><option value="blacklist">Blacklist (block listed)</option><option value="whitelist">Whitelist (only allow listed)</option></select>
+            </div>
+            <div class="form-group mb-0">
+              <label>Extensions (no dots)<span class="info-icon" tabindex="0">i<span class="info-tooltip">The extension list used by the rule mode above. Type an extension without the dot (e.g. "exe") and press Enter or Add; click the × on a chip to remove it.</span></span></label>
+              <div class="tag-list" id="extension_list_tags"></div>
+              <div class="tag-list-input">
+                <input type="text" id="extension_list_input" placeholder="e.g. exe - press Enter to add">
+                <button type="button" class="btn btn-outline btn-sm" id="extension_list_add">Add</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3 class="mt-0">Retention &amp; Expiration</h3>
+            <div class="form-group">
+              <label>Allowed TTL presets<span class="info-icon" tabindex="0">i<span class="info-tooltip">Expiration choices offered to uploaders. Each entry is a number plus a unit letter: m = minutes, h = hours, d = days (e.g. 10m, 24h, 7d).</span></span></label>
+              <div class="tag-list" id="allowed_ttl_presets_tags"></div>
+              <div class="tag-list-input">
+                <input type="text" id="allowed_ttl_presets_input" placeholder="e.g. 24h - press Enter to add">
+                <button type="button" class="btn btn-outline btn-sm" id="allowed_ttl_presets_add">Add</button>
+              </div>
+              <div class="form-hint">Format: a number followed by m (minutes), h (hours), or d (days).</div>
+            </div>
+            <div class="form-group"><label>Default TTL<span class="info-icon" tabindex="0">i<span class="info-tooltip">Which of the allowed presets above is pre-selected in the uploader UI.</span></span></label><input type="text" id="default_ttl"></div>
+            <div class="switch-row">
+              <div><div class="label">Allow custom expiration<span class="info-icon" tabindex="0">i<span class="info-tooltip">Lets uploaders pick their own expiration from the presets above. Off hides the "Expires after" field entirely and every upload uses the Default TTL, fixed.</span></span></div><div class="desc">Off = every upload uses the Default TTL, fixed</div></div>
+              <label class="switch"><input type="checkbox" id="allow_custom_ttl"><span class="slider"></span></label>
+            </div>
+            <div class="switch-row">
+              <div><div class="label">Allow burn-after-download<span class="info-icon" tabindex="0">i<span class="info-tooltip">Lets uploaders opt in to deleting the file immediately after its first successful download. If off, uploaders can't enable it even if they want to.</span></span></div></div>
+              <label class="switch"><input type="checkbox" id="allow_burn_after_download"><span class="slider"></span></label>
+            </div>
+            <div class="switch-row">
+              <div><div class="label">Force burn-after-download<span class="info-icon" tabindex="0">i<span class="info-tooltip">Makes every upload burn-after-download regardless of what the uploader chose.</span></span></div></div>
+              <label class="switch"><input type="checkbox" id="force_burn_after_download"><span class="slider"></span></label>
+            </div>
+            <div class="switch-row mt-2">
+              <div><div class="label">Allow custom max downloads<span class="info-icon" tabindex="0">i<span class="info-tooltip">Lets uploaders set their own download-count limit. Off hides the "Max downloads" field entirely and every upload uses the default below, fixed.</span></span></div><div class="desc">Off = every upload uses the default below, fixed</div></div>
+              <label class="switch"><input type="checkbox" id="allow_custom_max_downloads"><span class="slider"></span></label>
+            </div>
+            <div class="form-group mt-2 mb-0"><label>Default max downloads (0 = unlimited)<span class="info-icon" tabindex="0">i<span class="info-tooltip">Pre-filled download-count limit for new uploads when the uploader doesn't set their own. 0 means no limit.</span></span></label><input type="number" id="default_max_downloads" min="0"></div>
+          </div>
+
+          <div class="card">
+            <h3 class="mt-0">Local Storage Engine</h3>
+            <div class="form-group"><label>Storage path<span class="info-icon" tabindex="0">i<span class="info-tooltip">Filesystem directory where encrypted blobs are written. Changing this doesn't move already-stored files - update it before uploads happen, or move the files yourself.</span></span></label><input type="text" id="storage_path"></div>
+            <div class="form-group"><label>Total storage cap (GB)<span class="info-icon" tabindex="0">i<span class="info-tooltip">New uploads are rejected once disk usage would exceed 95% of this cap, so there's always a little headroom left.</span></span></label><input type="number" id="total_storage_cap_gb" min="1"></div>
+            <div class="form-group mb-0"><label>Cleanup interval (minutes)<span class="info-icon" tabindex="0">i<span class="info-tooltip">How often the background worker scans for and purges expired or download-exhausted files from disk and the database.</span></span></label><input type="number" id="cleanup_interval_minutes" min="1"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="settings-panel" data-panel="privacy" hidden>
+        <div class="grid grid-2">
+          <div class="card">
+            <h3 class="mt-0">Extreme Anonymity Engine</h3>
+            <div class="switch-row">
+              <div><div class="label">Zero-log mode (uploads)<span class="info-icon" tabindex="0">i<span class="info-tooltip">When on, upload events are recorded only as an anonymous ANON_UPLOAD entry with no IP, user agent, or account link at all - overrides the IP obfuscation level below for uploads specifically.</span></span></div><div class="desc">Disable IP/UA/precise-timestamp logging for uploads</div></div>
+              <label class="switch"><input type="checkbox" id="zero_log_mode"><span class="slider"></span></label>
+            </div>
+            <div class="form-group mt-2">
+              <label>IP obfuscation level<span class="info-icon" tabindex="0">i<span class="info-tooltip">Strict None records no IP at all. Masked Subnet zeroes the last two IPv4 octets (or uses a /64 for IPv6) so only a rough network is visible. Full IP records the exact address.</span></span></label>
+              <select id="ip_obfuscation_level">
+                <option value="none">Strict None (don't capture)</option>
+                <option value="masked">Masked Subnet (/16 or /64)</option>
+                <option value="full">Full IP</option>
+              </select>
+            </div>
+            <div class="form-group mb-0">
+              <label>Timestamp fuzzing<span class="info-icon" tabindex="0">i<span class="info-tooltip">Rounds audit-log timestamps to blunt timing-correlation attacks, at the cost of precision when investigating incidents.</span></span></label>
+              <select id="timestamp_fuzzing">
+                <option value="none">None</option>
+                <option value="hour">Round to nearest hour</option>
+                <option value="day">Round to nearest day</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3 class="mt-0">Audit &amp; Security</h3>
+            <div class="switch-row">
+              <div><div class="label">Disable audit logging<span class="info-icon" tabindex="0">i<span class="info-tooltip">Stops all new events from being written to the audit log - uploads, downloads, logins, admin actions, everything. Existing entries are kept until pruned. Turning this on cannot itself be logged, since logging is off by the time the change takes effect.</span></span></div><div class="desc">Stop recording new audit log entries entirely</div></div>
+              <label class="switch"><input type="checkbox" id="disable_audit_log"><span class="slider"></span></label>
+            </div>
+            <div class="form-group mt-2"><label>Audit log retention (days)<span class="info-icon" tabindex="0">i<span class="info-tooltip">Default age used by the "Prune" action on the Audit Log page - entries older than this many days are deleted when you prune.</span></span></label><input type="number" id="audit_log_retention_days" min="1"></div>
+            <div class="form-group mb-0"><label>Max login/password attempts<span class="info-icon" tabindex="0">i<span class="info-tooltip">Number of failed attempts allowed before lockout - applies both to account logins and to guessing a file's secondary password.</span></span></label><input type="number" id="max_login_attempts" min="1"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="settings-panel" data-panel="appearance" hidden>
+        <div class="card" style="max-width:560px">
+          <h3 class="mt-0">Navigation</h3>
+          <div class="switch-row">
+            <div><div class="label">Hide Upload link<span class="info-icon" tabindex="0">i<span class="info-tooltip">Removes the "Upload" link from the top navigation bar. The page itself stays reachable at / for anyone who has the address.</span></span></div><div class="desc">Remove "Upload" from the nav bar</div></div>
+            <label class="switch"><input type="checkbox" id="hide_upload_link"><span class="slider"></span></label>
+          </div>
+          <div class="switch-row">
+            <div><div class="label">Hide Download link<span class="info-icon" tabindex="0">i<span class="info-tooltip">Removes the "Download" link from the top navigation bar. The page itself stays reachable at /download for anyone who has the address.</span></span></div><div class="desc">Remove "Download" from the nav bar</div></div>
+            <label class="switch"><input type="checkbox" id="hide_download_link"><span class="slider"></span></label>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3 class="mt-0">Custom Theme</h3>
+          <div class="switch-row">
+            <div><div class="label">Use a custom theme<span class="info-icon" tabindex="0">i<span class="info-tooltip">Replaces the built-in light/dark themes with the fixed colors below for every visitor. The light/dark toggle disappears from the nav bar while this is on.</span></span></div><div class="desc">Disables the light/dark toggle and forces the colors below</div></div>
+            <label class="switch"><input type="checkbox" id="custom_theme_enabled"><span class="slider"></span></label>
+          </div>
+          <div class="grid grid-2 mt-2 mb-0" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">
+            <div class="form-group mb-0">
+              <label>Background</label>
+              <input type="color" id="custom_theme_paper">
+            </div>
+            <div class="form-group mb-0">
+              <label>Surface (cards, inputs)</label>
+              <input type="color" id="custom_theme_surface">
+            </div>
+            <div class="form-group mb-0">
+              <label>Top menu background<span class="info-icon" tabindex="0">i<span class="info-tooltip">Background of the navigation bar at the top of every page. Defaults to match the surface color.</span></span></label>
+              <input type="color" id="custom_theme_navbar_bg">
+            </div>
+            <div class="form-group mb-0">
+              <label>Border</label>
+              <input type="color" id="custom_theme_border">
+            </div>
+            <div class="form-group mb-0">
+              <label>Text</label>
+              <input type="color" id="custom_theme_text">
+            </div>
+            <div class="form-group mb-0">
+              <label>Accent (buttons, links)</label>
+              <input type="color" id="custom_theme_accent">
+            </div>
+            <div class="form-group mb-0">
+              <label>Danger (delete, destructive actions)<span class="info-icon" tabindex="0">i<span class="info-tooltip">Kept separate from the accent color on purpose, so destructive buttons like "Delete" stay visually distinct as a safety signal.</span></span></label>
+              <input type="color" id="custom_theme_danger">
+            </div>
+            <div class="form-group mb-0">
+              <label>Heading color</label>
+              <input type="color" id="custom_theme_heading_color">
+            </div>
+          </div>
+          <div class="grid grid-2 mt-2 mb-0" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">
+            <div class="form-group mb-0">
+              <label>Heading size (%)<span class="info-icon" tabindex="0">i<span class="info-tooltip">Scales all headings (h2-h4) up or down from their default size. 100% = default.</span></span></label>
+              <input type="number" id="custom_theme_heading_scale" min="70" max="160" step="5">
+            </div>
+            <div class="form-group mb-0">
+              <label>Body text size (%)<span class="info-icon" tabindex="0">i<span class="info-tooltip">Scales the base body text size up or down across the whole app. 100% = default.</span></span></label>
+              <input type="number" id="custom_theme_body_scale" min="85" max="125" step="5">
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="settings-panel" data-panel="email" hidden>
+        <div class="card">
+          <h3 class="mt-0">Email (SMTP) &amp; Password Reset</h3>
+          <div class="switch-row">
+            <div><div class="label">Enable password reset emails<span class="info-icon" tabindex="0">i<span class="info-tooltip">Turns on the "Forgot password?" link on the login page and the email-sending machinery behind it. Requires a working SMTP server below.</span></span></div><div class="desc">Let users request a password reset link by email</div></div>
+            <label class="switch"><input type="checkbox" id="smtp_enabled"><span class="slider"></span></label>
+          </div>
+          <div class="switch-row">
+            <div><div class="label">Enable download notifications<span class="info-icon" tabindex="0">i<span class="info-tooltip">Site-wide switch for the per-file "Notify me when downloaded" option on the upload page. Still requires password reset emails (above) to be enabled, since it uses the same SMTP configuration.</span></span></div><div class="desc">Let logged-in uploaders opt in to an email when their file is downloaded</div></div>
+            <label class="switch"><input type="checkbox" id="enable_download_notifications"><span class="slider"></span></label>
+          </div>
+          <div class="grid grid-2 mt-2 mb-0" style="grid-template-columns:repeat(auto-fit,minmax(240px,1fr))">
+            <div class="form-group">
+              <label>SMTP host<span class="info-icon" tabindex="0">i<span class="info-tooltip">Hostname of your outgoing mail server, e.g. smtp.gmail.com or smtp.sendgrid.net.</span></span></label>
+              <input type="text" id="smtp_host" placeholder="smtp.example.com">
+            </div>
+            <div class="form-group">
+              <label>SMTP port<span class="info-icon" tabindex="0">i<span class="info-tooltip">Common values: 587 for STARTTLS, 465 for implicit SSL, 25 for unencrypted (not recommended).</span></span></label>
+              <input type="number" id="smtp_port" min="1" max="65535">
+            </div>
+            <div class="form-group">
+              <label>SMTP username</label>
+              <input type="text" id="smtp_username" autocomplete="off">
+            </div>
+            <div class="form-group">
+              <label>SMTP password<span class="info-icon" tabindex="0">i<span class="info-tooltip">Stored on the server so it can log in to your mail provider - never shown back to you once saved. Leave this blank to keep the currently saved password.</span></span></label>
+              <input type="password" id="smtp_password" autocomplete="off" placeholder="leave blank to keep current">
+              <div class="form-hint" id="smtpPasswordHint"></div>
+            </div>
+            <div class="form-group">
+              <label>Encryption</label>
+              <select id="smtp_encryption">
+                <option value="starttls">STARTTLS</option>
+                <option value="ssl">SSL/TLS</option>
+                <option value="none">None</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>From address<span class="info-icon" tabindex="0">i<span class="info-tooltip">The "From" address on reset emails. Many providers require this to match the authenticated SMTP account.</span></span></label>
+              <input type="email" id="smtp_from_email" placeholder="noreply@example.com">
+            </div>
+            <div class="form-group">
+              <label>From name<span class="info-icon" tabindex="0">i<span class="info-tooltip">Optional. Falls back to the brand name above if left blank.</span></span></label>
+              <input type="text" id="smtp_from_name" placeholder="SecureDrop">
+            </div>
+            <div class="form-group">
+              <label>Reset link expiry (minutes)</label>
+              <input type="number" id="password_reset_token_expiry_minutes" min="5" max="1440">
+            </div>
+            <div class="form-group mb-0" style="grid-column:1 / -1">
+              <label>Public base URL<span class="info-icon" tabindex="0">i<span class="info-tooltip">Used to build the link inside reset emails, e.g. https://drop.example.com. Leave blank to use the address the request came in on - set this explicitly if you're behind a reverse proxy or load balancer that changes it.</span></span></label>
+              <input type="text" id="public_base_url" placeholder="https://drop.example.com">
+            </div>
+          </div>
+          <div class="row mt-2 mb-0" style="align-items:flex-end">
+            <div class="form-group mb-0">
+              <label for="smtpTestEmail">Send a test email</label>
+              <input type="email" id="smtpTestEmail" placeholder="you@example.com">
+            </div>
+            <button type="button" class="btn btn-outline" id="smtpTestBtn" style="flex:none">Send test</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="settings-panel" data-panel="danger-zone" hidden>
+        <div class="card" style="max-width:640px; border-color:var(--danger)">
+          <h3 class="mt-0" style="color:var(--danger)">Reset Database</h3>
+          <p class="small text-muted">Permanently deletes every user, file, and setting on this instance, and re-bootstraps a single fresh admin account - exactly like a brand new install. <strong>This cannot be undone.</strong></p>
+          <button class="btn btn-danger" id="openResetModalBtn">Reset Database</button>
+        </div>
+      </section>
+
+    </div>
+  </div>
+
+  <div class="settings-save-bar">
+    <button class="btn btn-primary" id="saveBtn">Save Settings</button>
+  </div>
+</main>
+
+<footer class="app-footer" id="sd-footer"></footer>
+
+<div class="modal-backdrop" id="resetConfirmModal" hidden>
+  <div class="modal" style="position:relative; max-width:440px">
+    <button class="modal-close-x" id="resetConfirmCloseBtn" title="Close" aria-label="Close">×</button>
+    <h3 class="mt-0" style="color:var(--danger)">Reset database</h3>
+    <p class="small text-muted mt-0">This permanently deletes all users, files, and settings on this instance. Everyone will be logged out, including you. A new admin account will be created.</p>
+    <div class="form-group">
+      <label for="resetConfirmPassword">Your current password</label>
+      <input type="password" id="resetConfirmPassword" autocomplete="current-password">
+    </div>
+    <div class="form-group mb-0">
+      <label for="resetConfirmPhrase">Type RESET to confirm</label>
+      <input type="text" id="resetConfirmPhrase" autocomplete="off">
+    </div>
+    <button class="btn btn-danger btn-block mt-2" id="resetConfirmBtn">Permanently reset everything</button>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="resetResultModal" hidden>
+  <div class="modal" style="position:relative; max-width:440px">
+    <h3 class="mt-0">Database reset complete</h3>
+    <p class="small text-muted mt-0">A fresh admin account has been created. Save these credentials now - they won't be shown again.</p>
+    <div class="form-group">
+      <label>Username</label>
+      <div class="copy-field"><input type="text" id="resetResultUsername" readonly></div>
+    </div>
+    <div class="form-group">
+      <label>Password</label>
+      <div class="copy-field">
+        <input type="text" id="resetResultPassword" readonly>
+        <button type="button" class="btn btn-outline" id="resetResultCopyBtn">Copy</button>
+      </div>
+    </div>
+    <button class="btn btn-primary btn-block mt-2" id="resetResultGoToLoginBtn">Go to login</button>
+  </div>
+</div>
+
+<script src="/static/js/theme.js"></script>
+<script src="/static/js/api.js"></script>
+<script src="/static/js/layout.js"></script>
+<script src="/static/js/toast.js"></script>
+<script src="/static/js/tooltip.js"></script>
+<script src="/static/js/admin-settings.js"></script>
+</body>
+</html>

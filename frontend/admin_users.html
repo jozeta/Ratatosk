@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SecureDrop - User Management</title>
+<link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+
+<div id="sd-navbar" class="navbar"></div>
+
+<main class="container-wide" style="padding-top:32px; padding-bottom:32px">
+  <div id="disabledNotice" class="card" style="display:none">
+    <h2 class="mt-0">User Management</h2>
+    <p class="text-muted">This feature is disabled in <a href="/admin/settings">Admin Settings</a>.</p>
+  </div>
+
+  <div id="content" style="display:none">
+    <div class="card">
+      <div class="card-header">
+        <h2 class="mt-0 mb-0">User Management</h2>
+        <div class="row" style="flex:none">
+          <button class="btn btn-danger btn-sm" id="batchDeleteBtn" hidden>Delete selected</button>
+          <input type="file" id="csvFileInput" accept=".csv,text/csv" hidden>
+          <button class="btn btn-outline btn-sm" id="importCsvBtn">Import CSV</button>
+          <button class="btn btn-outline btn-sm" id="downloadTemplateBtn">Download template</button>
+          <button class="btn btn-outline btn-sm" id="exportUsersBtn">Export CSV</button>
+          <span class="info-icon" tabindex="0">i<span class="info-tooltip">
+            The CSV needs a header row with <code>username</code> and <code>password</code> columns, plus optional <code>email</code> and <code>is_admin</code> columns (is_admin: true/false, defaults to false). One user per row after that. Example:<br>
+            <code style="display:block; margin-top:6px; white-space:pre; overflow-x:auto; max-width:100%">username,password,is_admin
+alice,Str0ngPass!23,false
+bob,Str0ngPass!45,true</code>
+            Max 1000 rows, 1MB file, UTF-8 encoded. Rows that fail (duplicate username, weak password, etc.) are skipped and reported - everything else still imports. Use "Download template" for a ready-made starting file.
+          </span></span>
+          <button class="btn btn-primary btn-sm" id="newUserBtn">Add user</button>
+        </div>
+      </div>
+
+      <p class="small text-muted mt-0">Click a user to view or edit their details.</p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th class="checkbox-cell"><input type="checkbox" id="selectAllCheckbox"></th>
+              <th>Username</th>
+              <th>Email</th>
+              <th>Role</th>
+              <th>Status</th>
+              <th>2FA</th>
+              <th>Created</th>
+            </tr>
+          </thead>
+          <tbody id="usersTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</main>
+
+<footer class="app-footer" id="sd-footer"></footer>
+
+<div class="modal-backdrop" id="userModal" hidden>
+  <div class="modal" style="position:relative; max-width:440px">
+    <button class="modal-close-x" id="userModalCloseBtn" title="Close" aria-label="Close">×</button>
+    <h3 class="mt-0" id="userModalTitle">Edit user</h3>
+
+    <div class="form-group">
+      <label for="modalUsername">Username</label>
+      <input type="text" id="modalUsername" minlength="3" maxlength="64" autocomplete="off">
+    </div>
+    <div class="form-group">
+      <label for="modalEmail">Email<span class="info-icon" tabindex="0">i<span class="info-tooltip">Used only so this user can reset their own password later. Leave blank if they haven't provided one.</span></span></label>
+      <input type="email" id="modalEmail" maxlength="254" autocomplete="off">
+    </div>
+    <div class="form-group">
+      <label for="modalPassword" id="modalPasswordLabel">Password</label>
+      <input type="password" id="modalPassword" autocomplete="new-password">
+      <div class="strength-bar"><div class="strength-fill" id="modalStrengthFill"></div></div>
+      <span class="small text-muted" id="modalStrengthLabel"></span>
+      <ul class="policy-checklist" id="modalPolicyChecklist"></ul>
+      <div class="form-hint" id="modalPasswordHint"></div>
+    </div>
+
+    <div class="switch-row">
+      <div><div class="label">Admin<span class="info-icon" tabindex="0">i<span class="info-tooltip">Admins can access every /admin page and can always log in even if user login is disabled.</span></span></div><div class="desc">Full access to every admin page</div></div>
+      <label class="switch"><input type="checkbox" id="modalIsAdmin"><span class="slider"></span></label>
+    </div>
+    <div class="switch-row">
+      <div><div class="label">Active<span class="info-icon" tabindex="0">i<span class="info-tooltip">Inactive accounts can't log in, but keep their uploaded files and history.</span></span></div><div class="desc">Off = account can't log in</div></div>
+      <label class="switch"><input type="checkbox" id="modalIsActive"><span class="slider"></span></label>
+    </div>
+
+    <div class="switch-row" id="modalMfaRow" hidden>
+      <div><div class="label">Two-factor authentication<span class="info-icon" tabindex="0">i<span class="info-tooltip">Whether this user has an authenticator app set up. If they've lost their device, reset it here so they can log in with just their password and set it up again.</span></span></div><div class="desc" id="modalMfaStatus">—</div></div>
+      <button type="button" class="btn btn-outline btn-sm" id="modalMfaResetBtn" hidden>Reset MFA</button>
+    </div>
+
+    <p class="small text-muted mt-2 mb-0" id="modalCreatedRow" hidden></p>
+    <div class="alert alert-info mt-2" id="modalSelfNotice" hidden>This is your own account - you can't remove your own admin access, deactivate, or delete yourself here.</div>
+
+    <div class="flex justify-between items-center mt-3">
+      <button class="btn btn-danger" id="modalDeleteBtn" hidden>Delete user</button>
+      <div class="row" style="flex:none; margin-left:auto">
+        <button class="btn btn-outline" id="modalCancelBtn">Cancel</button>
+        <button class="btn btn-primary" id="modalSaveBtn">Save changes</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="/static/js/theme.js"></script>
+<script src="/static/js/api.js"></script>
+<script src="/static/js/layout.js"></script>
+<script src="/static/js/toast.js"></script>
+<script src="/static/js/tooltip.js"></script>
+<script src="/static/js/password-strength.js"></script>
+<script src="/static/js/admin-users.js"></script>
+</body>
+</html>

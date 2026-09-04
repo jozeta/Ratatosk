@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SecureDrop - Download</title>
+<link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+
+<div id="sd-navbar" class="navbar"></div>
+
+<main class="container-narrow" style="padding-top:32px; padding-bottom:32px">
+
+  <div class="card" id="metaCard">
+    <h2 class="mt-0">Encrypted file</h2>
+    <p class="text-muted small" id="metaInfo">Loading file information...</p>
+
+    <div class="form-group" id="passwordGroup" style="display:none">
+      <label for="passwordInput">This file requires a passphrase</label>
+      <input type="password" id="passwordInput" placeholder="Enter the passphrase you were given">
+    </div>
+
+    <div id="progressWrap" class="mt-2" style="display:none">
+      <div class="progress"><div class="progress-bar" id="progressBar"></div></div>
+      <div class="small text-muted mt-1" id="progressLabel"></div>
+    </div>
+
+    <button class="btn btn-primary btn-block mt-2" id="downloadBtn" disabled>Decrypt &amp; Download</button>
+  </div>
+</main>
+
+<footer class="app-footer" id="sd-footer"></footer>
+
+<script src="/static/js/theme.js"></script>
+<script src="/static/js/api.js"></script>
+<script src="/static/js/layout.js"></script>
+<script src="/static/js/toast.js"></script>
+<script src="/static/js/crypto.js"></script>
+<script src="/static/js/download-common.js"></script>
+<script src="/static/js/share.js"></script>
+</body>
+</html>

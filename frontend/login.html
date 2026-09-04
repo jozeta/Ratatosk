@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SecureDrop - Login</title>
+<link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+
+<div id="sd-navbar" class="navbar"></div>
+
+<main class="container-narrow" style="padding-top:32px; padding-bottom:32px">
+  <div class="card" style="max-width:400px; margin:0 auto">
+    <h2 class="mt-0">Log in</h2>
+    <form id="loginForm">
+      <div class="form-group">
+        <label for="username">Username</label>
+        <input type="text" id="username" required autocomplete="username">
+      </div>
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input type="password" id="password" required autocomplete="current-password">
+      </div>
+      <button type="submit" class="btn btn-primary btn-block">Log in</button>
+    </form>
+    <p class="small text-muted mt-2" id="forgotPasswordRow" hidden><a href="/forgot-password">Forgot password?</a></p>
+    <p class="small text-muted mt-1" id="registerRow">No account? <a href="/register">Register</a></p>
+
+    <form id="mfaForm" hidden>
+      <p class="small text-muted mt-0">Enter the 6-digit code from your authenticator app, or one of your backup codes.</p>
+      <div class="form-group">
+        <label for="mfaCode">Code</label>
+        <input type="text" id="mfaCode" inputmode="numeric" autocomplete="one-time-code" autofocus>
+      </div>
+      <button type="submit" class="btn btn-primary btn-block">Verify</button>
+      <button type="button" class="btn btn-outline btn-block mt-1" id="mfaBackBtn">Back</button>
+    </form>
+
+    <div id="mfaSetupRequiredView" hidden>
+      <div class="alert alert-info">Two-factor authentication is required on this account. Set it up now to finish logging in.</div>
+      <p class="small text-muted mt-0">Scan this with your authenticator app, or enter the code manually.</p>
+      <div class="text-center mb-2"><div class="qr-box"><canvas id="mfaSetupQrCanvas" width="200" height="200"></canvas></div></div>
+      <div class="form-group">
+        <label>Manual entry code</label>
+        <div class="copy-field">
+          <input type="text" id="mfaSetupManualSecret" readonly>
+          <button type="button" class="btn btn-outline" id="mfaSetupCopySecretBtn">Copy</button>
+        </div>
+      </div>
+      <form id="mfaSetupRequiredForm">
+        <div class="form-group">
+          <label for="mfaSetupCode">Enter the 6-digit code to confirm</label>
+          <input type="text" id="mfaSetupCode" inputmode="numeric" required autocomplete="one-time-code">
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">Confirm and continue</button>
+      </form>
+    </div>
+
+    <div id="mfaSetupBackupCodesView" hidden>
+      <div class="alert alert-success">2FA is now enabled. Save these backup codes somewhere safe - each one can be used once if you lose access to your authenticator app. They won't be shown again.</div>
+      <div class="tag-list" id="mfaSetupBackupCodesList"></div>
+      <button class="btn btn-outline btn-sm mt-1" id="mfaSetupCopyBackupCodesBtn">Copy all</button>
+      <button class="btn btn-primary btn-block mt-2" id="mfaSetupBackupCodesDoneBtn">Continue</button>
+    </div>
+  </div>
+</main>
+
+<footer class="app-footer" id="sd-footer"></footer>
+
+<script src="/static/js/theme.js"></script>
+<script src="/static/js/api.js"></script>
+<script src="/static/js/layout.js"></script>
+<script src="/static/js/toast.js"></script>
+<script src="/static/js/vendor/qrcode.js"></script>
+<script>
+(function () {
+  let cfg = null;
+  function applyCfgVisibility() {
+    document.getElementById("forgotPasswordRow").hidden = !cfg || !cfg.password_reset_enabled;
+    document.getElementById("registerRow").hidden = !cfg || !cfg.allow_user_registration;
+  }
+  window.SDApi.get("/api/config").then((c) => { cfg = c; applyCfgVisibility(); }).catch(() => {});
+
+  async function redirectAfterLogin(isAdmin) {
+    if (isAdmin) {
+      // First-run setup wizard runs once, right after an admin's first login.
+      try {
+        const settings = await window.SDApi.get("/api/admin/settings");
+        window.location.href = settings.setup_completed ? "/admin/settings" : "/admin/setup";
+      } catch (e) {
+        window.location.href = "/admin/settings";
+      }
+    } else {
+      window.location.href = "/files";
+    }
+  }
+
+  async function completeLogin(res) {
+    window.SDApi.setSession(res.access_token, { id: res.id, username: res.username, is_admin: res.is_admin });
+    await redirectAfterLogin(res.is_admin);
+  }
+
+  const loginForm = document.getElementById("loginForm");
+  const mfaForm = document.getElementById("mfaForm");
+  const mfaCodeInput = document.getElementById("mfaCode");
+  const mfaSetupRequiredView = document.getElementById("mfaSetupRequiredView");
+  const mfaSetupBackupCodesView = document.getElementById("mfaSetupBackupCodesView");
+  let mfaToken = null;
+  let setupToken = null;
+  let pendingBackupCodes = [];
+
+  function hideAllRows() {
+    loginForm.hidden = true;
+    document.getElementById("forgotPasswordRow").hidden = true;
+    document.getElementById("registerRow").hidden = true;
+    mfaForm.hidden = true;
+    mfaSetupRequiredView.hidden = true;
+    mfaSetupBackupCodesView.hidden = true;
+  }
+
+  function showMfaStep(token) {
+    mfaToken = token;
+    hideAllRows();
+    mfaForm.hidden = false;
+    mfaCodeInput.value = "";
+    mfaCodeInput.focus();
+  }
+
+  function showMfaSetupRequiredStep(token) {
+    setupToken = token;
+    hideAllRows();
+    mfaSetupRequiredView.hidden = false;
+    document.getElementById("mfaSetupCode").value = "";
+  }
+
+  loginForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    try {
+      const res = await window.SDApi.post("/api/auth/login", {
+        username: document.getElementById("username").value,
+        password: document.getElementById("password").value,
+      });
+      if (res.mfa_required) {
+        showMfaStep(res.mfa_token);
+      } else if (res.mfa_setup_required) {
+        const setup = await window.SDApi.post("/api/auth/mfa/enforce-setup", { setup_token: res.setup_token });
+        showMfaSetupRequiredStep(res.setup_token);
+        document.getElementById("mfaSetupManualSecret").value = setup.secret;
+        if (window.SDQRCode) {
+          try { window.SDQRCode.renderToCanvas(document.getElementById("mfaSetupQrCanvas"), setup.otpauth_url); }
+          catch (err) { /* QR is a convenience, manual code still works */ }
+        }
+      } else {
+        await completeLogin(res);
+      }
+    } catch (err) {
+      window.SDToast.danger(err.message);
+    }
+  });
+
+  mfaForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    try {
+      const res = await window.SDApi.post("/api/auth/mfa/verify", {
+        mfa_token: mfaToken,
+        code: mfaCodeInput.value,
+      });
+      await completeLogin(res);
+    } catch (err) {
+      window.SDToast.danger(err.message);
+    }
+  });
+
+  document.getElementById("mfaBackBtn").addEventListener("click", () => {
+    mfaToken = null;
+    hideAllRows();
+    loginForm.hidden = false;
+    applyCfgVisibility();
+  });
+
+  document.getElementById("mfaSetupCopySecretBtn").addEventListener("click", () => {
+    navigator.clipboard.writeText(document.getElementById("mfaSetupManualSecret").value);
+  });
+
+  document.getElementById("mfaSetupRequiredForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    try {
+      const res = await window.SDApi.post("/api/auth/mfa/enforce-confirm", {
+        setup_token: setupToken,
+        code: document.getElementById("mfaSetupCode").value,
+      });
+      pendingBackupCodes = res.backup_codes;
+      // Full login has already been granted by this response - stash the
+      // session now so a closed tab or interrupted "Continue" click doesn't
+      // strand the user back at the login form after they've already set up MFA.
+      window.SDApi.setSession(res.access_token, { id: res.id, username: res.username, is_admin: res.is_admin });
+      hideAllRows();
+      mfaSetupBackupCodesView.hidden = false;
+      const list = document.getElementById("mfaSetupBackupCodesList");
+      list.innerHTML = "";
+      for (const code of pendingBackupCodes) {
+        const chip = document.createElement("span");
+        chip.className = "tag-chip";
+        chip.textContent = code;
+        list.appendChild(chip);
+      }
+    } catch (err) {
+      window.SDToast.danger(err.message);
+    }
+  });
+
+  document.getElementById("mfaSetupCopyBackupCodesBtn").addEventListener("click", () => {
+    navigator.clipboard.writeText(pendingBackupCodes.join("\n"));
+  });
+
+  document.getElementById("mfaSetupBackupCodesDoneBtn").addEventListener("click", async () => {
+    const me = window.SDApi.getUser();
+    await redirectAfterLogin(!!(me && me.is_admin));
+  });
+})();
+</script>
+</body>
+</html>

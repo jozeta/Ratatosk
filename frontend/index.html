@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SecureDrop</title>
+<link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+
+<div id="sd-navbar" class="navbar"></div>
+
+<main class="container-narrow" style="padding-top:32px; padding-bottom:32px">
+
+  <div class="card">
+    <h2 class="mt-0">Send a file, zero-knowledge</h2>
+    <p class="text-muted small">Encrypted entirely in your browser with AES-256-GCM before it ever leaves your device. The server only ever stores ciphertext.</p>
+
+    <div class="dropzone" id="dropzone">
+      <div class="icon">📁</div>
+      <div id="dropzoneText">Drag &amp; drop a file here, or click to browse</div>
+      <div class="form-hint" id="maxSizeHint"></div>
+      <div class="small mt-1" id="folderPickerRow" style="display:none">or <a href="#" id="folderPickerLink">choose a folder</a></div>
+      <input type="file" id="fileInput" hidden>
+      <input type="file" id="folderInput" webkitdirectory multiple hidden>
+    </div>
+
+    <div id="fileQueue" class="mt-2" style="display:none"></div>
+
+    <div class="grid grid-2 mt-2" id="ttlMaxDownloadsRow">
+      <div class="form-group mb-0" id="ttlGroup">
+        <label for="ttlSelect">Expires after<span class="info-icon" tabindex="0">i<span class="info-tooltip">How long the file is kept before it's automatically deleted. The recipient must download it before this expires.</span></span></label>
+        <select id="ttlSelect"></select>
+      </div>
+      <div class="form-group mb-0" id="maxDownloadsGroup">
+        <label for="maxDownloads">Max downloads (0 = unlimited)<span class="info-icon" tabindex="0">i<span class="info-tooltip">The file is auto-deleted once it has been downloaded this many times. Set to 0 to allow unlimited downloads until it expires.</span></span></label>
+        <input type="number" id="maxDownloads" min="0" value="0">
+      </div>
+    </div>
+
+    <div class="switch-row" id="burnRow">
+      <div>
+        <div class="label">Burn after download<span class="info-icon" tabindex="0">i<span class="info-tooltip">Deletes the file immediately after the very first successful download, even if "max downloads" above allows more.</span></span></div>
+        <div class="desc">Delete immediately after the first successful download</div>
+      </div>
+      <label class="switch"><input type="checkbox" id="burnAfterDownload"><span class="slider"></span></label>
+    </div>
+
+    <div class="switch-row" id="notifyRow" style="display:none">
+      <div>
+        <div class="label">Notify me when downloaded<span class="info-icon" tabindex="0">i<span class="info-tooltip">Sends an email to your account address each time this file is downloaded. The email describes the download (size, time) but never the filename, since the server never learns it.</span></span></div>
+        <div class="desc">Get an email each time this file is downloaded</div>
+      </div>
+      <label class="switch"><input type="checkbox" id="notifyOnDownload"><span class="slider"></span></label>
+    </div>
+
+    <div class="form-group mt-2" id="passwordGroup">
+      <label for="secondaryPassword">Secondary passphrase <span class="text-muted" id="passwordOptionalLabel">(optional)</span><span class="info-icon" tabindex="0">i<span class="info-tooltip">If set, the file's encryption key is derived from this passphrase instead of a random key in the share link - the link alone won't be enough to decrypt it. Share the passphrase with the recipient through a different channel than the link. With more than one file queued, the same passphrase is used for all of them.</span></span></label>
+      <input type="password" id="secondaryPassword" placeholder="Adds a second, out-of-band secret required to decrypt">
+      <div class="form-hint">When set, the encryption key is derived from this passphrase instead of the link - share it with the recipient through a different channel than the link itself.</div>
+    </div>
+
+    <div id="progressWrap" class="mt-2" style="display:none">
+      <div class="progress"><div class="progress-bar" id="progressBar"></div></div>
+      <div class="small text-muted mt-1" id="progressLabel"></div>
+    </div>
+
+    <button class="btn btn-primary btn-block mt-2" id="uploadBtn" disabled>Encrypt &amp; Upload</button>
+  </div>
+</main>
+
+<div class="modal-backdrop" id="resultModal" hidden>
+  <div class="modal" style="position:relative">
+    <button class="modal-close-x" id="closeModalXBtn" title="Close" aria-label="Close">×</button>
+    <h3 class="mt-0">File uploaded</h3>
+    <p class="small text-muted">Anyone with this link (and passphrase, if set) can download and decrypt the file. The server cannot.</p>
+
+    <div class="form-group">
+      <label>Share link</label>
+      <div class="copy-field">
+        <input type="text" id="resultLink" readonly>
+        <button class="btn btn-outline" id="copyLinkBtn">Copy</button>
+      </div>
+    </div>
+
+    <div class="form-group" id="resultKeyGroup">
+      <label>Decryption key (embedded in link above)</label>
+      <div class="copy-field">
+        <input type="text" id="resultKey" readonly>
+        <button class="btn btn-outline" id="copyKeyBtn">Copy</button>
+      </div>
+    </div>
+
+    <div class="text-center mt-2 mb-2">
+      <div class="qr-box"><canvas id="qrCanvas" width="200" height="200"></canvas></div>
+    </div>
+
+    <div id="shareWithUsersSection" class="form-group" style="display:none">
+      <label>Share with specific users<span class="info-icon" tabindex="0">i<span class="info-tooltip">Chosen accounts can decrypt this file just by logging in and visiting "Shared With Me" - no link or passphrase needed. Only works for files without a secondary passphrase.</span></span></label>
+      <div class="user-picker" id="userPickerList"></div>
+      <button class="btn btn-outline btn-block mt-1" id="shareWithUsersBtn">Share</button>
+      <div class="small text-muted mt-1" id="shareStatus"></div>
+    </div>
+
+    <button class="btn btn-primary btn-block mt-2" id="uploadAnotherBtn">Upload another file</button>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="batchResultModal" hidden>
+  <div class="modal" style="position:relative">
+    <button class="modal-close-x" id="closeBatchModalXBtn" title="Close" aria-label="Close">×</button>
+    <h3 class="mt-0">Files uploaded</h3>
+    <p class="small text-muted">Each file has its own link and key. Copy them now - keys aren't stored anywhere.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>File</th><th>Link</th><th></th></tr></thead>
+        <tbody id="batchResultsBody"></tbody>
+      </table>
+    </div>
+    <button class="btn btn-primary btn-block mt-2" id="batchUploadAnotherBtn">Upload more files</button>
+  </div>
+</div>
+
+<footer class="app-footer" id="sd-footer"></footer>
+
+<script src="/static/js/theme.js"></script>
+<script src="/static/js/api.js"></script>
+<script src="/static/js/layout.js"></script>
+<script src="/static/js/toast.js"></script>
+<script src="/static/js/tooltip.js"></script>
+<script src="/static/js/crypto.js"></script>
+<script src="/static/js/exif-strip.js"></script>
+<script src="/static/js/vendor/qrcode.js"></script>
+<script src="/static/js/upload.js"></script>
+</body>
+</html>

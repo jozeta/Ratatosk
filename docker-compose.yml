@@ -1,0 +1,16 @@
+services:
+  securedrop:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      SECUREDROP_DATABASE_URL: "sqlite:////app/data/securedrop.db"
+      SECUREDROP_STORAGE_ROOT: "/app/storage/encrypted"
+      SECUREDROP_TMP_ROOT: "/app/storage/tmp"
+      SECUREDROP_SECRET_KEY: "${SECUREDROP_SECRET_KEY:?set a random 32+ char secret in .env}"
+      SECUREDROP_DEFAULT_ADMIN_USERNAME: "${SECUREDROP_DEFAULT_ADMIN_USERNAME:-admin}"
+      SECUREDROP_DEFAULT_ADMIN_PASSWORD: "${SECUREDROP_DEFAULT_ADMIN_PASSWORD:-}"
+    volumes:
+      - ./data:/app/data
+      - ./storage:/app/storage
+    restart: unless-stopped

@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SecureDrop - Setup</title>
+<link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+
+<div id="sd-navbar" class="navbar"></div>
+
+<main class="container-narrow" style="padding-top:32px; padding-bottom:48px">
+
+  <div class="setup-steps" id="setupSteps">
+    <div class="setup-step active" data-step="1"><span class="setup-step-num">1</span>Branding</div>
+    <div class="setup-step" data-step="2"><span class="setup-step-num">2</span>Access &amp; security</div>
+    <div class="setup-step" data-step="3"><span class="setup-step-num">3</span>Finish</div>
+  </div>
+
+  <div class="card" data-panel="1">
+    <h2 class="mt-0">Welcome to SecureDrop</h2>
+    <p class="text-muted small">Let's set a few things up before your team starts using it. Every choice here can be changed later from Admin Settings.</p>
+
+    <div class="branding-row mt-2">
+      <div class="branding-preview">
+        <div class="logo-preview" id="logoPreviewWrap">
+          <img id="logoPreviewImg" alt="" hidden>
+          <svg id="logoPreviewDefault" width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" stroke-width="1.6"/>
+            <path d="M8 11V7.5a4 4 0 0 1 8 0V11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+            <circle cx="12" cy="15.5" r="1.4" fill="currentColor"/>
+          </svg>
+        </div>
+        <div>
+          <div class="branding-preview-name" id="brandPreviewName">SecureDrop</div>
+          <div class="text-muted small">Preview of the top-left mark</div>
+        </div>
+      </div>
+      <div class="branding-controls">
+        <input type="file" id="logoFileInput" accept="image/png,image/jpeg,image/webp,image/svg+xml,image/x-icon" hidden>
+        <button type="button" class="btn btn-outline btn-sm" id="logoUploadBtn">Upload logo</button>
+        <button type="button" class="btn btn-outline btn-sm" id="logoRemoveBtn">Remove logo</button>
+        <div class="form-hint mt-1">PNG, JPEG, WebP, SVG, or ICO — max 2MB. Optional; skip if you're fine with the default mark.</div>
+      </div>
+    </div>
+
+    <div class="grid grid-2 mt-2 mb-0">
+      <div class="form-group mb-0">
+        <label for="brand_name">Brand name</label>
+        <input type="text" id="brand_name" maxlength="64" placeholder="SecureDrop">
+      </div>
+      <div class="form-group mb-0">
+        <label for="footer_text">Footer text</label>
+        <textarea id="footer_text" rows="2" maxlength="512" placeholder="Optional"></textarea>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" data-panel="2" hidden>
+    <h2 class="mt-0">Access &amp; security</h2>
+    <p class="text-muted small">These are the settings that matter most for a first deployment. Fine-tune everything else in Admin Settings any time.</p>
+
+    <div class="switch-row">
+      <div><div class="label">Anonymous uploading</div><div class="desc">Allow drop-and-go uploads without an account</div></div>
+      <label class="switch"><input type="checkbox" id="allow_anonymous_upload"><span class="slider"></span></label>
+    </div>
+    <div class="switch-row">
+      <div><div class="label">Anonymous downloading</div><div class="desc">Allow public link access without login</div></div>
+      <label class="switch"><input type="checkbox" id="allow_anonymous_download"><span class="slider"></span></label>
+    </div>
+    <div class="switch-row">
+      <div><div class="label">Public user registration</div><div class="desc">Off = invite-only; you create accounts from User Management</div></div>
+      <label class="switch"><input type="checkbox" id="allow_user_registration"><span class="slider"></span></label>
+    </div>
+    <div class="switch-row">
+      <div><div class="label">Account login rate limiting<span class="info-icon" tabindex="0">i<span class="info-tooltip">Locks an account out for a while after too many wrong passwords in a row, to block brute-force guessing.</span></span></div><div class="desc">Recommended: locks accounts out after repeated failed logins</div></div>
+      <label class="switch"><input type="checkbox" id="enable_login_rate_limit"><span class="slider"></span></label>
+    </div>
+  </div>
+
+  <div class="card" data-panel="3" hidden>
+    <h2 class="mt-0">You're set</h2>
+    <p class="text-muted small">Review your choices below. You can change any of this later from Admin Settings.</p>
+    <div class="table-wrap">
+      <table>
+        <tbody id="reviewBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="setup-nav">
+    <a href="#" id="skipLink" class="small text-muted">Skip setup</a>
+    <div>
+      <button class="btn btn-outline" id="backBtn" hidden>Back</button>
+      <button class="btn btn-primary" id="nextBtn">Continue</button>
+      <button class="btn btn-primary" id="finishBtn" hidden>Finish setup</button>
+    </div>
+  </div>
+
+</main>
+
+<script src="/static/js/theme.js"></script>
+<script src="/static/js/api.js"></script>
+<script src="/static/js/layout.js"></script>
+<script src="/static/js/toast.js"></script>
+<script src="/static/js/tooltip.js"></script>
+<script src="/static/js/admin-setup.js"></script>
+</body>
+</html>

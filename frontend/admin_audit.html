@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SecureDrop - Audit Log</title>
+<link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+
+<div id="sd-navbar" class="navbar"></div>
+
+<main class="container-wide" style="padding-top:32px; padding-bottom:32px">
+  <h2 class="mt-0">Audit Log</h2>
+  <div class="alert alert-info" id="auditDisabledNotice" hidden>Audit logging is currently disabled in <a href="/admin/settings">Admin Settings</a> - no new events are being recorded.</div>
+
+  <div class="card">
+    <div class="row">
+      <div class="form-group mb-0">
+        <label>Event type<span class="info-icon" tabindex="0">i<span class="info-tooltip">Narrow the log to one kind of event, e.g. only downloads or only admin configuration changes.</span></span></label>
+        <select id="filterEventType">
+          <option value="">All</option>
+          <option value="UPLOAD">UPLOAD</option>
+          <option value="ANON_UPLOAD">ANON_UPLOAD</option>
+          <option value="DOWNLOAD">DOWNLOAD</option>
+          <option value="FILE_DELETED">FILE_DELETED</option>
+          <option value="FILE_EXPIRED">FILE_EXPIRED</option>
+          <option value="FILE_EXHAUSTED">FILE_EXHAUSTED</option>
+          <option value="FILE_BURNED">FILE_BURNED</option>
+          <option value="FILE_SHARED">FILE_SHARED</option>
+          <option value="FILE_UNSHARED">FILE_UNSHARED</option>
+          <option value="BRUTE_FORCE_BLOCK">BRUTE_FORCE_BLOCK</option>
+          <option value="LOGIN_SUCCESS">LOGIN_SUCCESS</option>
+          <option value="LOGIN_FAILED">LOGIN_FAILED</option>
+          <option value="USER_REGISTERED">USER_REGISTERED</option>
+          <option value="PASSWORD_CHANGED">PASSWORD_CHANGED</option>
+          <option value="EMAIL_UPDATED">EMAIL_UPDATED</option>
+          <option value="MFA_SETUP_STARTED">MFA_SETUP_STARTED</option>
+          <option value="MFA_ENABLED">MFA_ENABLED</option>
+          <option value="MFA_DISABLED">MFA_DISABLED</option>
+          <option value="MFA_FAILED">MFA_FAILED</option>
+          <option value="MFA_BACKUP_CODE_USED">MFA_BACKUP_CODE_USED</option>
+          <option value="ADMIN_MFA_RESET">ADMIN_MFA_RESET</option>
+          <option value="SESSIONS_REVOKED">SESSIONS_REVOKED</option>
+          <option value="SYSTEM_RESET">SYSTEM_RESET</option>
+          <option value="PASSWORD_RESET_REQUESTED">PASSWORD_RESET_REQUESTED</option>
+          <option value="PASSWORD_RESET_VIA_EMAIL">PASSWORD_RESET_VIA_EMAIL</option>
+          <option value="USER_DELETED_SELF">USER_DELETED_SELF</option>
+          <option value="ADMIN_CONFIG_CHANGE">ADMIN_CONFIG_CHANGE</option>
+          <option value="ADMIN_USER_CREATED">ADMIN_USER_CREATED</option>
+          <option value="ADMIN_USER_UPDATED">ADMIN_USER_UPDATED</option>
+          <option value="ADMIN_USER_RENAMED">ADMIN_USER_RENAMED</option>
+          <option value="ADMIN_USER_DELETED">ADMIN_USER_DELETED</option>
+          <option value="ADMIN_PASSWORD_RESET">ADMIN_PASSWORD_RESET</option>
+        </select>
+      </div>
+      <div class="form-group mb-0">
+        <label>File ID<span class="info-icon" tabindex="0">i<span class="info-tooltip">Exact match only - paste the full file ID to see every event recorded for that one file.</span></span></label>
+        <input type="text" id="filterFileId" placeholder="exact file id">
+      </div>
+      <div class="form-group mb-0">
+        <label>Search detail<span class="info-icon" tabindex="0">i<span class="info-tooltip">Free-text search within each event's detail field (e.g. upload size, which settings changed). Doesn't search IP addresses or user agents.</span></span></label>
+        <input type="text" id="filterSearch" placeholder="free text">
+      </div>
+      <div class="form-group mb-0">
+        <label>&nbsp;</label>
+        <button class="btn btn-primary btn-block" id="applyFiltersBtn">Filter</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <div class="small text-muted" id="resultCount"></div>
+      <div class="row" style="flex:none">
+        <button class="btn btn-outline btn-sm" id="exportCsvBtn">Export CSV</button>
+        <button class="btn btn-outline btn-sm" id="exportJsonBtn">Export JSON</button>
+        <select id="pruneDays" style="width:auto">
+          <option value="30">Prune > 30d</option>
+          <option value="90" selected>Prune > 90d</option>
+          <option value="180">Prune > 180d</option>
+        </select>
+        <button class="btn btn-danger btn-sm" id="pruneBtn">Prune</button>
+        <span class="info-icon" tabindex="0">i<span class="info-tooltip">Permanently deletes audit log entries older than the selected age. This only removes log history - it never touches uploaded files.</span></span>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Time</th><th>Event</th><th>File</th><th>User</th><th>IP</th><th>Agent</th><th>Detail</th></tr>
+        </thead>
+        <tbody id="auditTableBody"></tbody>
+      </table>
+    </div>
+    <div class="flex justify-between items-center mt-2">
+      <button class="btn btn-outline btn-sm" id="prevPageBtn">Previous</button>
+      <span class="small text-muted" id="pageLabel"></span>
+      <button class="btn btn-outline btn-sm" id="nextPageBtn">Next</button>
+    </div>
+  </div>
+</main>
+
+<footer class="app-footer" id="sd-footer"></footer>
+
+<script src="/static/js/theme.js"></script>
+<script src="/static/js/api.js"></script>
+<script src="/static/js/layout.js"></script>
+<script src="/static/js/toast.js"></script>
+<script src="/static/js/tooltip.js"></script>
+<script src="/static/js/admin-audit.js"></script>
+</body>
+</html>

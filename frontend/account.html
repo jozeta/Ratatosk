@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SecureDrop - Profile</title>
+<link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+
+<div id="sd-navbar" class="navbar"></div>
+
+<main class="container" style="padding-top:32px; padding-bottom:32px">
+  <h2 class="mt-0">Profile</h2>
+
+  <div class="card">
+    <h3 class="mt-0">Email<span class="info-icon" tabindex="0">i<span class="info-tooltip">Used only to send you a password reset link if you ever forget your password. Leave blank if you'd rather not provide one.</span></span></h3>
+    <form id="emailForm">
+      <div class="form-group mb-0">
+        <label for="email">Email</label>
+        <input type="email" id="email" maxlength="254" autocomplete="email" placeholder="you@example.com">
+      </div>
+      <button type="submit" class="btn btn-primary mt-2">Save email</button>
+    </form>
+  </div>
+
+  <div class="card" id="mfaCard" hidden>
+    <div class="card-header">
+      <h3 class="mt-0 mb-0">Two-factor authentication<span class="info-icon" tabindex="0">i<span class="info-tooltip">Requires a 6-digit code from an authenticator app (like Google Authenticator, Authy, or 1Password) in addition to your password when logging in.</span></span></h3>
+      <span class="badge" id="mfaStatusBadge">—</span>
+    </div>
+
+    <div id="mfaDisabledView">
+      <p class="small text-muted mt-0">Not currently enabled.</p>
+      <button class="btn btn-primary" id="mfaEnableBtn">Enable 2FA</button>
+    </div>
+
+    <div id="mfaEnabledView" style="display:none">
+      <p class="small text-muted mt-0">Two-factor authentication is protecting your account.</p>
+      <button class="btn btn-outline" id="mfaShowDisableBtn">Disable 2FA</button>
+    </div>
+
+    <form id="mfaDisableForm" style="display:none">
+      <div class="form-group">
+        <label for="mfaDisablePassword">Confirm your password to disable 2FA</label>
+        <input type="password" id="mfaDisablePassword" autocomplete="current-password" required>
+      </div>
+      <button type="submit" class="btn btn-danger">Disable 2FA</button>
+      <button type="button" class="btn btn-outline" id="mfaCancelDisableBtn">Cancel</button>
+    </form>
+
+    <div id="mfaSetupView" style="display:none">
+      <p class="small text-muted mt-0">Scan this with your authenticator app, or enter the code manually.</p>
+      <div class="text-center mb-2"><div class="qr-box"><canvas id="mfaQrCanvas" width="200" height="200"></canvas></div></div>
+      <div class="form-group">
+        <label>Manual entry code</label>
+        <div class="copy-field">
+          <input type="text" id="mfaManualSecret" readonly>
+          <button type="button" class="btn btn-outline" id="mfaCopySecretBtn">Copy</button>
+        </div>
+      </div>
+      <form id="mfaConfirmForm">
+        <div class="form-group">
+          <label for="mfaConfirmCode">Enter the 6-digit code to confirm</label>
+          <input type="text" id="mfaConfirmCode" inputmode="numeric" required autocomplete="one-time-code">
+        </div>
+        <button type="submit" class="btn btn-primary">Confirm and enable</button>
+        <button type="button" class="btn btn-outline" id="mfaCancelSetupBtn">Cancel</button>
+      </form>
+    </div>
+
+    <div id="mfaBackupCodesView" style="display:none">
+      <div class="alert alert-success">2FA is now enabled. Save these backup codes somewhere safe - each one can be used once if you lose access to your authenticator app. They won't be shown again.</div>
+      <div class="tag-list" id="mfaBackupCodesList"></div>
+      <button class="btn btn-outline btn-sm mt-1" id="mfaCopyBackupCodesBtn">Copy all</button>
+      <button class="btn btn-primary btn-block mt-2" id="mfaBackupCodesDoneBtn">Done</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 class="mt-0">Change password</h3>
+    <form id="changePasswordForm">
+      <div class="form-group">
+        <label for="currentPassword">Current password</label>
+        <input type="password" id="currentPassword" required autocomplete="current-password">
+      </div>
+      <div class="form-group">
+        <label for="newPassword">New password</label>
+        <input type="password" id="newPassword" required autocomplete="new-password">
+        <div class="strength-bar"><div class="strength-fill" id="strengthFill"></div></div>
+        <span class="small text-muted" id="strengthLabel"></span>
+        <ul class="policy-checklist" id="policyChecklist"></ul>
+      </div>
+      <button type="submit" class="btn btn-primary">Update password</button>
+    </form>
+    <div class="dropdown-divider mt-2 mb-2"></div>
+    <p class="small text-muted mb-1">Sign this account out of every other browser/device, without changing your password.</p>
+    <button class="btn btn-outline" id="logoutEverywhereBtn">Log out other sessions</button>
+  </div>
+
+  <div class="card" id="apiKeysCard" style="display:none">
+    <div class="card-header">
+      <h3 class="mt-0 mb-0">API keys<span class="info-icon" tabindex="0">i<span class="info-tooltip">Lets you upload files from the command line (see cli/securedrop_upload.py) without a browser. Treat a key like a password - anyone with it can upload as you.</span></span></h3>
+      <button class="btn btn-primary btn-sm" id="newKeyBtn">Create key</button>
+    </div>
+    <div id="newKeyForm" class="row mb-2" style="display:none; align-items:flex-end">
+      <div class="form-group mb-0">
+        <label>Name</label>
+        <input type="text" id="newKeyName" placeholder="e.g. laptop, CI pipeline">
+      </div>
+      <div class="form-group mb-0">
+        <label>Scope<span class="info-icon" tabindex="0">i<span class="info-tooltip">"Upload only" can call the upload endpoints and nothing else - safer to hand to a script or CI pipeline than a full-access key.</span></span></label>
+        <select id="newKeyScope">
+          <option value="full">Full access</option>
+          <option value="upload">Upload only</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" id="createKeyBtn">Create</button>
+      <button class="btn btn-outline" id="cancelNewKeyBtn">Cancel</button>
+    </div>
+    <div id="newKeyResult" class="alert alert-success" style="display:none"></div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Name</th><th>Scope</th><th>Key</th><th>Created</th><th>Last used</th><th></th></tr>
+        </thead>
+        <tbody id="apiKeysTableBody"></tbody>
+      </table>
+    </div>
+    <p class="text-muted small mt-2" id="apiKeysEmptyState" style="display:none">No API keys yet.</p>
+  </div>
+
+  <div class="card">
+    <h3 class="mt-0">Delete account</h3>
+    <p class="small text-muted">This permanently deletes your account. Files you've already shared will keep working (they become unowned) but you'll lose access to "My Files".</p>
+    <button class="btn btn-danger" id="deleteAccountBtn">Delete my account</button>
+  </div>
+</main>
+
+<footer class="app-footer" id="sd-footer"></footer>
+
+<script src="/static/js/theme.js"></script>
+<script src="/static/js/api.js"></script>
+<script src="/static/js/layout.js"></script>
+<script src="/static/js/toast.js"></script>
+<script src="/static/js/tooltip.js"></script>
+<script src="/static/js/password-strength.js"></script>
+<script src="/static/js/vendor/qrcode.js"></script>
+<script src="/static/js/account.js"></script>
+</body>
+</html>

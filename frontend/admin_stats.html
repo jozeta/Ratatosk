@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SecureDrop - Statistics</title>
+<link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+
+<div id="sd-navbar" class="navbar"></div>
+
+<main class="container-wide" style="padding-top:32px; padding-bottom:32px">
+  <h2 class="mt-0">Statistics</h2>
+
+  <div class="grid grid-2 mb-2" id="statCards"></div>
+
+  <div class="card">
+    <div class="card-header">
+      <h3 class="mt-0 mb-0">Activity over time</h3>
+      <select id="rangeSelect" style="width:auto">
+        <option value="7d">Last 7 days</option>
+        <option value="30d" selected>Last 30 days</option>
+        <option value="6m">Last 6 months</option>
+        <option value="1y">Last 1 year</option>
+      </select>
+    </div>
+    <div class="chart-legend mb-1">
+      <span class="legend-item"><span class="legend-swatch" style="background:#3457d5"></span>Uploads</span>
+      <span class="legend-item"><span class="legend-swatch" style="background:#37c789"></span>Downloads</span>
+    </div>
+    <div class="bar-chart-scroll">
+      <svg id="activityChart" width="100%" height="240"></svg>
+    </div>
+  </div>
+
+  <div class="grid grid-2">
+    <div class="card mb-0">
+      <h3 class="mt-0">Storage usage</h3>
+      <div class="row" style="align-items:center">
+        <div style="flex:none">
+          <svg id="storagePie" width="180" height="180" viewBox="0 0 200 200"></svg>
+        </div>
+        <div style="flex:1; min-width:180px">
+          <div id="storageLegend"></div>
+          <p class="small text-muted mt-2" id="storageText"></p>
+        </div>
+      </div>
+    </div>
+
+    <div class="card mb-0">
+      <h3 class="mt-0">File extensions</h3>
+      <div class="row" style="align-items:center">
+        <div style="flex:none">
+          <svg id="extensionPie" width="180" height="180" viewBox="0 0 200 200"></svg>
+        </div>
+        <div style="flex:1; min-width:180px">
+          <div id="extensionLegend"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card mt-2">
+    <h3 class="mt-0">Event totals (all-time)</h3>
+    <div class="table-wrap">
+      <table>
+        <tbody id="eventsTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<footer class="app-footer" id="sd-footer"></footer>
+
+<script src="/static/js/theme.js"></script>
+<script src="/static/js/api.js"></script>
+<script src="/static/js/layout.js"></script>
+<script src="/static/js/toast.js"></script>
+<script src="/static/js/admin-stats.js"></script>
+</body>
+</html>

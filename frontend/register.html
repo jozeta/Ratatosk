@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SecureDrop - Register</title>
+<link rel="stylesheet" href="/static/css/app.css">
+</head>
+<body>
+
+<div id="sd-navbar" class="navbar"></div>
+
+<main class="container-narrow" style="padding-top:32px; padding-bottom:32px">
+  <div class="card" style="max-width:400px; margin:0 auto" id="registerDisabledNotice" hidden>
+    <h2 class="mt-0">Registration is closed</h2>
+    <p class="text-muted small mb-0">This instance isn't accepting new sign-ups right now. If you need an account, ask an admin to create one for you.</p>
+    <p class="small text-muted mt-2 mb-0">Already have an account? <a href="/login">Log in</a></p>
+  </div>
+
+  <div class="card" style="max-width:400px; margin:0 auto" id="registerFormCard">
+    <h2 class="mt-0">Create an account</h2>
+    <form id="registerForm">
+      <div class="form-group">
+        <label for="username">Username</label>
+        <input type="text" id="username" required minlength="3" maxlength="64" autocomplete="username">
+      </div>
+      <div class="form-group">
+        <label for="email">Email <span class="text-muted">(optional)</span><span class="info-icon" tabindex="0">i<span class="info-tooltip">Only used so you can reset your password later if you forget it. Leave it blank if you'd rather not provide one.</span></span></label>
+        <input type="email" id="email" maxlength="254" autocomplete="email">
+      </div>
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input type="password" id="password" required autocomplete="new-password">
+        <div class="strength-bar"><div class="strength-fill" id="strengthFill"></div></div>
+        <div class="flex justify-between items-center mt-1">
+          <span class="small text-muted" id="strengthLabel"></span>
+        </div>
+        <ul class="policy-checklist" id="policyChecklist"></ul>
+      </div>
+      <button type="submit" class="btn btn-primary btn-block">Register</button>
+    </form>
+    <p class="small text-muted mt-2">Already have an account? <a href="/login">Log in</a></p>
+  </div>
+</main>
+
+<footer class="app-footer" id="sd-footer"></footer>
+
+<script src="/static/js/theme.js"></script>
+<script src="/static/js/api.js"></script>
+<script src="/static/js/layout.js"></script>
+<script src="/static/js/toast.js"></script>
+<script src="/static/js/tooltip.js"></script>
+<script src="/static/js/password-strength.js"></script>
+<script>
+(function () {
+  const form = document.getElementById("registerForm");
+  const passwordInput = document.getElementById("password");
+  let cfg = { password_min_length: 8 };
+
+  window.SDApi.get("/api/config").then((c) => {
+    cfg = c;
+    if (!cfg.allow_user_registration) {
+      document.getElementById("registerFormCard").hidden = true;
+      document.getElementById("registerDisabledNotice").hidden = false;
+      return;
+    }
+    window.SDPasswordStrength.attach(
+      passwordInput,
+      document.getElementById("strengthFill"),
+      document.getElementById("strengthLabel"),
+      document.getElementById("policyChecklist"),
+      cfg
+    );
+  }).catch(() => {
+    window.SDPasswordStrength.attach(passwordInput, document.getElementById("strengthFill"), document.getElementById("strengthLabel"), document.getElementById("policyChecklist"), cfg);
+  });
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    try {
+      const res = await window.SDApi.post("/api/auth/register", {
+        username: document.getElementById("username").value,
+        email: document.getElementById("email").value.trim() || null,
+        password: passwordInput.value,
+      });
+      window.SDApi.setSession(res.access_token, { id: res.id, username: res.username, is_admin: res.is_admin });
+      window.location.href = "/files";
+    } catch (err) {
+      window.SDToast.danger(err.message);
+    }
+  });
+})();
+</script>
+</body>
+</html>
