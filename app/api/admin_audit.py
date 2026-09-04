@@ -73,11 +73,21 @@ def export_audit_logs(
             headers={"Content-Disposition": "attachment; filename=audit_log.json"},
         )
 
+    def _csv_safe(value):
+        # Several of these fields (detail, user_agent, actor_token) can
+        # contain attacker-influenced text - e.g. a failed-login username
+        # gets logged verbatim. Excel/Sheets treats a leading =, +, -, or @
+        # as a formula, so a crafted username could execute code on whoever
+        # opens the export. Prefixing with a quote neutralizes that without
+        # changing the visible value for anything legitimate.
+        s = "" if value is None else str(value)
+        return "'" + s if s[:1] in ("=", "+", "-", "@", "\t", "\r") else s
+
     buf = io.StringIO()
     writer = csv.DictWriter(buf, fieldnames=fields)
     writer.writeheader()
     for i in items:
-        writer.writerow({k: (getattr(i, k).isoformat() if k == "timestamp" else getattr(i, k)) for k in fields})
+        writer.writerow({k: _csv_safe(getattr(i, k).isoformat() if k == "timestamp" else getattr(i, k)) for k in fields})
     return StreamingResponse(
         io.BytesIO(buf.getvalue().encode()),
         media_type="text/csv",

@@ -65,11 +65,25 @@ def export_users_csv(db: Session = Depends(get_db), admin: User = Depends(requir
     _require_enabled()
     users = db.query(User).order_by(User.created_at.desc()).all()
 
+    def _csv_safe(value):
+        # username/email are user-chosen; Excel/Sheets treats a leading =, +,
+        # -, or @ as a formula, so an unsanitized export could execute code
+        # on whoever opens it. Prefixing with a quote neutralizes that.
+        s = "" if value is None else str(value)
+        return "'" + s if s[:1] in ("=", "+", "-", "@", "\t", "\r") else s
+
     buf = io.StringIO()
     writer = csv.writer(buf)
     writer.writerow(["username", "email", "is_admin", "is_active", "mfa_enabled", "created_at"])
     for u in users:
-        writer.writerow([u.username, u.email or "", str(u.is_admin).lower(), str(u.is_active).lower(), str(u.mfa_enabled).lower(), u.created_at.isoformat()])
+        writer.writerow([
+            _csv_safe(u.username),
+            _csv_safe(u.email or ""),
+            str(u.is_admin).lower(),
+            str(u.is_active).lower(),
+            str(u.mfa_enabled).lower(),
+            u.created_at.isoformat(),
+        ])
 
     return StreamingResponse(
         io.BytesIO(buf.getvalue().encode()),
