@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SecureDrop - Admin Settings</title>
-<link rel="stylesheet" href="/static/css/app.css">
+<title>Ratatosk - Admin Settings</title>
+<link rel="stylesheet" href="/static/css/app.css" integrity="sha384-YetmR1azM/OlNBUGGGv1MKgZtyC1WcP/ovrT7LEul6zowoFeQF0lXLeo9qdpRg2x">
 </head>
 <body>
 
@@ -43,7 +43,7 @@
                   </svg>
                 </div>
                 <div>
-                  <div class="branding-preview-name" id="brandPreviewName">SecureDrop</div>
+                  <div class="branding-preview-name" id="brandPreviewName">Ratatosk</div>
                   <div class="text-muted small">Preview of the top-left mark</div>
                 </div>
               </div>
@@ -176,7 +176,8 @@
             <h3 class="mt-0">Upload &amp; File Constraints</h3>
             <div class="form-group"><label>Max file size (MB)<span class="info-icon" tabindex="0">i<span class="info-tooltip">Largest single file accepted. Checked both in the browser before encryption and again on the server, since the encrypted blob is a little larger than the original file.</span></span></label><input type="number" id="max_file_size_mb" min="1"></div>
             <div class="form-group"><label>Chunk size (MB)<span class="info-icon" tabindex="0">i<span class="info-tooltip">Size of each piece the browser splits an upload into. Smaller chunks are more resilient on flaky connections; larger chunks mean fewer HTTP requests.</span></span></label><input type="number" id="chunk_size_mb" min="1"></div>
-            <div class="form-group"><label>Max concurrent uploads<span class="info-icon" tabindex="0">i<span class="info-tooltip">How many uploads the same uploader (by account or anonymous session) can have in flight at once before new ones are rejected with a 429.</span></span></label><input type="number" id="max_concurrent_uploads" min="1"></div>
+            <div class="form-group"><label>Max concurrent uploads<span class="info-icon" tabindex="0">i<span class="info-tooltip">How many uploads the same uploader (by account or anonymous session) can have in flight at once before new ones are rejected with a 429.</span></span></label><input type="number" id="max_concurrent_uploads" min="1" max="100"></div>
+            <div class="form-group"><label for="max_active_upload_sessions">Max uploads in progress (all users)<span class="info-icon" tabindex="0">i<span class="info-tooltip">Server-wide cap on uploads in progress at once. Protects against anyone opening thousands of uploads; when full, new uploads get "Server is busy".</span></span></label><input type="number" id="max_active_upload_sessions" min="1" max="100000"></div>
             <div class="switch-row">
               <div><div class="label">Multi-file / folder upload<span class="info-icon" tabindex="0">i<span class="info-tooltip">Lets the upload page accept more than one file at once (including whole folders dropped in), queuing and encrypting each one separately. Off restricts the page to one file at a time.</span></span></div><div class="desc">Allow selecting or dropping multiple files/folders</div></div>
               <label class="switch"><input type="checkbox" id="enable_multi_file_upload"><span class="slider"></span></label>
@@ -228,9 +229,9 @@
 
           <div class="card">
             <h3 class="mt-0">Local Storage Engine</h3>
-            <div class="form-group"><label>Storage path<span class="info-icon" tabindex="0">i<span class="info-tooltip">Filesystem directory where encrypted blobs are written. Changing this doesn't move already-stored files - update it before uploads happen, or move the files yourself.</span></span></label><input type="text" id="storage_path"></div>
+            <div class="form-group"><label for="storage_path">Storage location<span class="info-icon" tabindex="0">i<span class="info-tooltip">Where encrypted blobs are stored (local backend). Configured on the server via environment variables.</span></span></label><input type="text" id="storage_path" readonly aria-describedby="storagePathHint"><div class="form-hint" id="storagePathHint">Set with the RATATOSK_STORAGE_ROOT environment variable - no longer editable here, so a hijacked admin session can't redirect deletions.</div></div>
             <div class="form-group"><label>Total storage cap (GB)<span class="info-icon" tabindex="0">i<span class="info-tooltip">New uploads are rejected once disk usage would exceed 95% of this cap, so there's always a little headroom left.</span></span></label><input type="number" id="total_storage_cap_gb" min="1"></div>
-            <div class="form-group mb-0"><label>Cleanup interval (minutes)<span class="info-icon" tabindex="0">i<span class="info-tooltip">How often the background worker scans for and purges expired or download-exhausted files from disk and the database.</span></span></label><input type="number" id="cleanup_interval_minutes" min="1"></div>
+            <div class="form-group mb-0"><label>Cleanup interval (minutes)<span class="info-icon" tabindex="0">i<span class="info-tooltip">How often the background worker scans for and purges expired or download-exhausted files from disk and the database.</span></span></label><input type="number" id="cleanup_interval_minutes" min="1" max="1440"></div>
           </div>
         </div>
       </section>
@@ -267,8 +268,17 @@
               <div><div class="label">Disable audit logging<span class="info-icon" tabindex="0">i<span class="info-tooltip">Stops all new events from being written to the audit log - uploads, downloads, logins, admin actions, everything. Existing entries are kept until pruned. Turning this on cannot itself be logged, since logging is off by the time the change takes effect.</span></span></div><div class="desc">Stop recording new audit log entries entirely</div></div>
               <label class="switch"><input type="checkbox" id="disable_audit_log"><span class="slider"></span></label>
             </div>
-            <div class="form-group mt-2"><label>Audit log retention (days)<span class="info-icon" tabindex="0">i<span class="info-tooltip">Default age used by the "Prune" action on the Audit Log page - entries older than this many days are deleted when you prune.</span></span></label><input type="number" id="audit_log_retention_days" min="1"></div>
-            <div class="form-group mb-0"><label>Max login/password attempts<span class="info-icon" tabindex="0">i<span class="info-tooltip">Number of failed attempts allowed before lockout - applies both to account logins and to guessing a file's secondary password.</span></span></label><input type="number" id="max_login_attempts" min="1"></div>
+            <div class="form-group mt-2"><label>Audit log retention (days)<span class="info-icon" tabindex="0">i<span class="info-tooltip">Entries older than this many days are deleted automatically by the cleanup worker (and by the Prune action on the Audit Log page).</span></span></label><input type="number" id="audit_log_retention_days" min="1"></div>
+            <div class="form-group mb-0"><label>Max login/password attempts<span class="info-icon" tabindex="0">i<span class="info-tooltip">Number of failed attempts allowed before lockout - applies both to account logins and to guessing a file's secondary password.</span></span></label><input type="number" id="max_login_attempts" min="1" max="100"></div>
+            <div class="switch-row mt-2">
+              <div>
+                <div class="label">Rate-limit abuse-prone requests<span class="info-icon" tabindex="0">i<span class="info-tooltip">Limits logins, registrations, password resets, anonymous upload starts and passphrase checks per client network. Counted in memory only - never written to disk.</span></span></div>
+                <div class="desc">Slow down guessing and flooding from any one network</div>
+              </div>
+              <label class="switch"><input type="checkbox" id="rate_limit_enabled"><span class="slider"></span></label>
+            </div>
+            <div class="form-group mb-0"><label for="rate_limit_per_minute">Requests per minute per network</label><input type="number" id="rate_limit_per_minute" min="1" max="10000"></div>
+            <div class="form-group mt-2 mb-0"><label for="onion_address">Tor onion address (optional)<span class="info-icon" tabindex="0">i<span class="info-tooltip">If this instance also runs as a Tor onion service, enter its .onion address. Pages then send an Onion-Location header, so Tor Browser offers to switch to the onion version. See docs/TOR.md.</span></span></label><input type="text" id="onion_address" placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.onion"></div>
           </div>
         </div>
       </section>
@@ -382,7 +392,7 @@
             </div>
             <div class="form-group">
               <label>From name<span class="info-icon" tabindex="0">i<span class="info-tooltip">Optional. Falls back to the brand name above if left blank.</span></span></label>
-              <input type="text" id="smtp_from_name" placeholder="SecureDrop">
+              <input type="text" id="smtp_from_name" placeholder="Ratatosk">
             </div>
             <div class="form-group">
               <label>Reset link expiry (minutes)</label>
@@ -457,11 +467,12 @@
   </div>
 </div>
 
-<script src="/static/js/theme.js"></script>
-<script src="/static/js/api.js"></script>
-<script src="/static/js/layout.js"></script>
-<script src="/static/js/toast.js"></script>
-<script src="/static/js/tooltip.js"></script>
-<script src="/static/js/admin-settings.js"></script>
+<script src="/static/js/theme.js" integrity="sha384-nHvWqFZ1BnneONoX6ZPhrl4VABFF8xIUWBwbhH3cUOnUSiE3adAxGv7hWS2t52O0"></script>
+<script src="/static/js/api.js" integrity="sha384-Y9cUFpIQmvkj2Dod0H9JG7V5GxpTGFAbTZhJLHozPr7aj5lVBXYv/vTl5aw/Wecd"></script>
+<script src="/static/js/util.js" integrity="sha384-8vf+Et4kAE1vlYnPu6eqdHc87s/gPaMgEbQs6hTCrAoVrU/2+gwZsWn0PkQ+uzz9"></script>
+<script src="/static/js/layout.js" integrity="sha384-YuqiK8ghvkemv2WE11QDtksZ8NuCwmK48ous0Fqt2+DdNIy6TJ2nu4YXLJGzij9B"></script>
+<script src="/static/js/toast.js" integrity="sha384-rJf0ghcDDyTSRWuJBh0oIWI5018WpskKKJWc467cQKtx4Ol3ldIt8aL4iZXE6DTG"></script>
+<script src="/static/js/tooltip.js" integrity="sha384-FBe2v4AX/7O72bIXLhFw5BYfgyVliL0EXpnX2tj3gLPqle3aykCG8TnNAgPnRzk3"></script>
+<script src="/static/js/admin-settings.js" integrity="sha384-uaPzHwePGePOTAzgNVJPxVSeVv6a0OnIH2jg57q4NR5oaoh6Z561A497hCkB9kUC"></script>
 </body>
 </html>

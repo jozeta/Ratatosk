@@ -1,3 +1,3 @@
-# Only needed if SECUREDROP_STORAGE_BACKEND=s3 (see app/core/config.py).
+# Only needed if RATATOSK_STORAGE_BACKEND=s3 (see app/core/config.py).
 # pip install -r requirements-s3.txt
-boto3==1.35.36
+boto3==1.40.0

@@ -14,7 +14,7 @@ class LoginRequest(BaseModel):
 
 class TokenResponse(BaseModel):
     access_token: str
-    token_type: str = "bearer"
+    token_type: str = "bearer"  # noqa: S105 - OAuth token type, not a secret
     is_admin: bool = False
     username: str
     id: str
@@ -81,3 +81,19 @@ class MfaConfirmResponse(BaseModel):
 
 class MfaDisableRequest(BaseModel):
     password: str
+    code: str = Field(min_length=1, max_length=16)  # current TOTP or a backup code (SEC-019)
+
+
+class RegisteredLoginRequired(BaseModel):
+    registered: bool = True
+    login_required: bool = True
+    detail: str
+
+
+class DeleteAccountRequest(BaseModel):
+    password: str | None = Field(default=None, max_length=256)
+    confirm_username: str | None = Field(default=None, max_length=64)  # SSO-only accounts have no password
+
+
+class UpdateDiscoverableRequest(BaseModel):
+    discoverable: bool

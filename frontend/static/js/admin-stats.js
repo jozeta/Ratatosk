@@ -81,7 +81,6 @@
     const chartWidth = Math.max(buckets.length * groupWidth + padding.left + padding.right, 560);
     const chartHeight = 240;
     const plotHeight = chartHeight - padding.top - padding.bottom;
-    const plotWidth = chartWidth - padding.left - padding.right;
 
     svgEl.setAttribute("viewBox", `0 0 ${chartWidth} ${chartHeight}`);
     svgEl.setAttribute("width", chartWidth);

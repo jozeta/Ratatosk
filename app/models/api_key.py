@@ -1,10 +1,10 @@
 import datetime
 import uuid
 
-from sqlalchemy import DateTime, ForeignKey, String
+from sqlalchemy import ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.core.database import Base
+from app.core.database import Base, UTCDateTime
 
 
 class ApiKey(Base):
@@ -28,6 +28,6 @@ class ApiKey(Base):
     # key can't list, download, or delete anything.
     scope: Mapped[str] = mapped_column(String(16), default="full", nullable=False)
     created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc)
+        UTCDateTime, default=lambda: datetime.datetime.now(datetime.UTC)
     )
-    last_used_at: Mapped[datetime.datetime | None] = mapped_column(DateTime, nullable=True)
+    last_used_at: Mapped[datetime.datetime | None] = mapped_column(UTCDateTime, nullable=True)

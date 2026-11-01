@@ -1,15 +1,35 @@
-FROM python:3.12-slim
+# Ratatosk container image (ARCH-005 hardening: pinned base image digest,
+# hash-verified dependencies, non-root user, health check).
+# Update the digest deliberately: docker buildx imagetools inspect python:3.13-slim
+FROM python:3.13-slim@sha256:2d44738ebf4ce5f63b9d9ea871e9c7cfdc0426f7b0c97cac915fd88ded1d86bb
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
 
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Exact, hash-pinned versions: a tampered or substituted package fails the install.
+COPY requirements.lock .
+RUN pip install --require-hashes -r requirements.lock
 
 COPY app ./app
+COPY cli ./cli
 COPY frontend ./frontend
+COPY migrations ./migrations
+COPY alembic.ini ./
 
-RUN mkdir -p /app/storage/encrypted /app/storage/tmp
+RUN useradd --system --uid 10001 --home-dir /app ratatosk \
+ && mkdir -p /app/data /app/storage/encrypted /app/storage/tmp /app/storage/branding \
+ && chown -R ratatosk:ratatosk /app/data /app/storage
+USER ratatosk
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "python -m app.init_db && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=4).status == 200 else 1)"
+
+# init_db runs the migrations and creates the first admin (idempotent).
+# --proxy-headers: trust X-Forwarded-Proto from your reverse proxy so HSTS
+# and secure cookies apply; restrict with FORWARDED_ALLOW_IPS.
+CMD ["sh", "-c", "python -m app.init_db && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers"]

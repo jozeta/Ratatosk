@@ -29,7 +29,7 @@
       if (CHECKBOX_FIELDS.has(field)) el.checked = !!cfg[field];
       else el.value = cfg[field] || "";
     }
-    document.getElementById("brandPreviewName").textContent = cfg.brand_name || "SecureDrop";
+    document.getElementById("brandPreviewName").textContent = cfg.brand_name || "Ratatosk";
     const img = document.getElementById("logoPreviewImg");
     const fallback = document.getElementById("logoPreviewDefault");
     if (cfg.brand_logo_filename) {

@@ -1,0 +1,7 @@
+# Onion service forwarding to the ratatosk container. The onion keys live in
+# the tor-keys volume - back it up, it *is* your .onion address.
+SocksPort 0
+HiddenServiceDir /var/lib/tor/ratatosk
+HiddenServiceVersion 3
+HiddenServicePort 80 ratatosk:8000
+Log notice stdout

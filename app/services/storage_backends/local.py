@@ -4,18 +4,36 @@ from typing import BinaryIO
 
 from app.services.storage_backends.base import StorageBackend
 
+LEGACY_DEFAULT_STORAGE_PATH = "./storage/encrypted"
+
 
 class LocalDiskBackend(StorageBackend):
-    """Default backend - behavior-identical to the app's original,
-    filesystem-only storage_service. Storage directory is the *dynamic*
-    (DB-backed, admin-editable) `storage_path` setting."""
+    """Default backend: blobs on local disk.
+
+    The directory comes from RATATOSK_STORAGE_ROOT (env-only, SEC-010). For
+    installs that changed the old admin-panel `storage_path` setting before it
+    became read-only, that saved value is still honoured unless the env var is
+    set explicitly - so upgrading never orphans existing files."""
 
     def _dir(self) -> str:
-        from app.core.dynamic_settings import get_settings
+        from app.core.config import settings, storage_root_explicit
 
-        path = get_settings()["storage_path"]
+        path = settings.storage_root
+        if not storage_root_explicit:
+            from app.core.dynamic_settings import get_settings
+
+            legacy = get_settings().get("storage_path")
+            if legacy and legacy != LEGACY_DEFAULT_STORAGE_PATH:
+                path = legacy
         os.makedirs(path, exist_ok=True)
         return path
+
+    def _path(self, storage_filename: str) -> str:
+        # Blob names are always 64 hex chars we generated; refuse anything
+        # else so a corrupted row can never address a path outside the dir.
+        if len(storage_filename) != 64 or any(c not in "0123456789abcdef" for c in storage_filename):
+            raise ValueError("invalid storage filename")
+        return os.path.join(self._dir(), storage_filename)
 
     def save(self, tmp_path: str) -> tuple[str, int]:
         import secrets
@@ -26,10 +44,10 @@ class LocalDiskBackend(StorageBackend):
         return filename, os.path.getsize(dest)
 
     def open_read(self, storage_filename: str) -> AbstractContextManager[BinaryIO]:
-        return open(os.path.join(self._dir(), storage_filename), "rb")
+        return open(self._path(storage_filename), "rb")
 
     def delete(self, storage_filename: str) -> None:
-        path = os.path.join(self._dir(), storage_filename)
+        path = self._path(storage_filename)
         if os.path.exists(path):
             os.remove(path)
 

@@ -1,0 +1,70 @@
+# Continuous integration (TEST-007): lint, type-check, security scans and all
+# test suites on every push and pull request.
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install
+        run: |
+          pip install --require-hashes -r requirements.lock
+          pip install -r requirements-dev.txt
+      - name: Lint (ruff)
+        run: ruff check app cli tests migrations/env.py
+      - name: Type-check (mypy)
+        run: mypy app cli
+      - name: Security lint (bandit)
+        run: bandit -c pyproject.toml -r app cli
+      - name: Frontend integrity (SRI hashes current)
+        run: python -m app.integrity check
+      - name: Dependency audit (pip-audit)
+        run: pip-audit -r requirements.txt -r requirements-s3.txt
+      - name: Unit and API tests
+        run: pytest -q --ignore=tests/e2e
+      - name: Browser and concurrency tests
+        run: |
+          python -m playwright install --with-deps chromium
+          pytest -q tests/e2e
+
+  javascript:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Install
+        run: |
+          npm ci || npm install
+          python -m venv .venv && .venv/bin/pip install cryptography
+      - name: Lint (eslint + no-unsanitized)
+        run: npx eslint frontend/static/js tests/js
+      - name: Crypto and metadata tests (incl. CLI/browser interop)
+        run: node --test tests/js/
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build -t ratatosk:ci .
+      - name: Smoke test
+        run: |
+          docker run -d --name r -e RATATOSK_SECRET_KEY=ci-only-secret-xxxxxxxxxxxxxxxxxxxxxxxxxxxx -p 8000:8000 --read-only --tmpfs /tmp \
+            -v data:/app/data -v storage:/app/storage -e RATATOSK_DATABASE_URL=sqlite:////app/data/r.db ratatosk:ci
+          for i in $(seq 30); do curl -fs localhost:8000/api/health && exit 0; sleep 1; done; docker logs r; exit 1

@@ -1,0 +1,16 @@
+{
+  "name": "ratatosk-frontend-tooling",
+  "private": true,
+  "description": "Dev-only tooling for the browser code (nothing here is shipped - the frontend has no build step or runtime dependencies).",
+  "license": "MIT",
+  "scripts": {
+    "lint": "eslint frontend/static/js tests/js",
+    "test": "node --test tests/js/"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.1",
+    "eslint": "9.39.1",
+    "eslint-plugin-no-unsanitized": "4.1.4",
+    "globals": "16.5.0"
+  }
+}

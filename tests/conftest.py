@@ -20,18 +20,21 @@ import tempfile
 
 _TEST_ROOT = tempfile.mkdtemp(prefix="securedrop_test_")
 
-os.environ["SECUREDROP_DATABASE_URL"] = "sqlite:///" + os.path.join(_TEST_ROOT, "test.db")
-os.environ["SECUREDROP_STORAGE_ROOT"] = os.path.join(_TEST_ROOT, "storage")
-os.environ["SECUREDROP_TMP_ROOT"] = os.path.join(_TEST_ROOT, "tmp")
-os.environ["SECUREDROP_BRANDING_ROOT"] = os.path.join(_TEST_ROOT, "branding")
-os.environ["SECUREDROP_SECRET_KEY"] = "pytest-only-secret-key-never-used-for-anything-real"
+os.environ["RATATOSK_DATABASE_URL"] = "sqlite:///" + os.path.join(_TEST_ROOT, "test.db")
+os.environ["RATATOSK_STORAGE_ROOT"] = os.path.join(_TEST_ROOT, "storage")
+os.environ["RATATOSK_TMP_ROOT"] = os.path.join(_TEST_ROOT, "tmp")
+os.environ["RATATOSK_BRANDING_ROOT"] = os.path.join(_TEST_ROOT, "branding")
+os.environ["RATATOSK_SECRET_KEY"] = "pytest-only-secret-key-never-used-for-anything-real"
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
+from app.core import ratelimit  # noqa: E402
+from app.core.config import settings as static_settings  # noqa: E402
 from app.core.database import Base, engine  # noqa: E402
 from app.core.dynamic_settings import update_settings  # noqa: E402
 from app.main import app  # noqa: E402
+from tests.helpers import make_user  # noqa: E402
 
 
 def pytest_sessionfinish(session, exitstatus):
@@ -45,11 +48,18 @@ def client(tmp_path):
     Base.metadata.create_all + sync_table_columns + load_cache) rather than
     a hand-rolled substitute - so migrations get exercised by every test."""
     Base.metadata.drop_all(bind=engine)
+    with engine.begin() as conn:
+        conn.exec_driver_sql("DROP TABLE IF EXISTS alembic_version")
+    # Storage is env-only now (SEC-010); point it at an isolated per-test dir.
+    static_settings.storage_root = str(tmp_path / "storage")
+    ratelimit.reset()
     with TestClient(app) as c:
-        # Dynamic (DB-backed) storage_path defaults to a relative path and is
-        # what the storage backend actually reads (see storage_backends/local.py) -
-        # override it too, per-test, to an isolated dir. See module docstring.
-        update_settings({"storage_path": str(tmp_path / "storage")})
+        # The rate limiter is tested explicitly; keep it out of every other test.
+        update_settings({"rate_limit_enabled": False})
+        # These tests authenticate with explicit bearer headers, so a login
+        # must not silently turn the shared client into a logged-in browser.
+        # Cookie sessions (SEC-017) are covered with their own clients.
+        c.event_hooks["response"].append(lambda r: c.cookies.delete("rt_session"))
         yield c
 
 
@@ -62,17 +72,6 @@ def db_session():
         yield db
     finally:
         db.close()
-
-
-def make_user(db, username, password, is_admin=False, email=None):
-    from app.core.security import hash_password
-    from app.models.user import User
-
-    user = User(username=username, password_hash=hash_password(password), is_admin=is_admin, email=email)
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-    return user
 
 
 @pytest.fixture()

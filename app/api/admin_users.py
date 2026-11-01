@@ -9,13 +9,12 @@ from app.core.database import get_db
 from app.core.dynamic_settings import get_settings
 from app.core.password_policy import validate_password
 from app.core.security import hash_password, require_admin
-from app.models.api_key import ApiKey
-from app.models.file import FileObject
-from app.models.file_share import FileShare
 from app.models.user import User
 from app.schemas.common import BatchIds
 from app.schemas.users import AdminCreateUser, AdminResetPassword, AdminUpdateUser, UserSummary
+from app.services import lockout
 from app.services.audit_service import log_event
+from app.services.users import assert_not_last_admin, delete_users
 
 router = APIRouter(prefix="/api/admin/users", tags=["admin"])
 
@@ -108,7 +107,7 @@ def import_users_csv(
     try:
         text = raw.decode("utf-8-sig")
     except UnicodeDecodeError:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="CSV file must be UTF-8 encoded")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="CSV file must be UTF-8 encoded") from None
 
     reader = csv.DictReader(io.StringIO(text))
     if reader.fieldnames is None:
@@ -169,17 +168,10 @@ def import_users_csv(
 def batch_delete_users(payload: BatchIds, request: Request, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
     _require_enabled()
     ids = [i for i in payload.ids if i != admin.id]
-    targets = db.query(User).filter(User.id.in_(ids)).all()
-    deleted_ids = [t.id for t in targets]
-    usernames = [t.username for t in targets]
+    deleted_ids = [t.id for t in db.query(User).filter(User.id.in_(ids)).all()]
+    usernames = delete_users(db, deleted_ids)
 
     if deleted_ids:
-        db.query(FileObject).filter(FileObject.owner_id.in_(deleted_ids)).update({"owner_id": None}, synchronize_session=False)
-        db.query(FileShare).filter(FileShare.recipient_id.in_(deleted_ids)).delete(synchronize_session=False)
-        db.query(FileShare).filter(FileShare.owner_id.in_(deleted_ids)).delete(synchronize_session=False)
-        db.query(ApiKey).filter(ApiKey.user_id.in_(deleted_ids)).delete(synchronize_session=False)
-        db.query(User).filter(User.id.in_(deleted_ids)).delete(synchronize_session=False)
-        db.commit()
         log_event(
             db,
             "ADMIN_USER_DELETED",
@@ -213,10 +205,14 @@ def update_user(user_id: str, payload: AdminUpdateUser, request: Request, db: Se
     if payload.is_admin is not None:
         if target.id == admin.id and not payload.is_admin:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You cannot remove your own admin privileges")
+        if not payload.is_admin:
+            assert_not_last_admin(db, [target.id], "demote this account")
         target.is_admin = payload.is_admin
     if payload.is_active is not None:
         if target.id == admin.id and not payload.is_active:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You cannot deactivate your own account")
+        if not payload.is_active:
+            assert_not_last_admin(db, [target.id], "deactivate this account")
         target.is_active = payload.is_active
 
     db.commit()
@@ -257,6 +253,7 @@ def admin_reset_mfa(user_id: str, request: Request, db: Session = Depends(get_db
     target.mfa_enabled = False
     target.mfa_secret = None
     target.mfa_backup_codes = None
+    target.mfa_last_step = None
     db.commit()
     log_event(db, "ADMIN_MFA_RESET", request=request, user_id=admin.id, detail=f"target={target.username}")
     return {"ok": True}
@@ -271,12 +268,22 @@ def delete_user(user_id: str, request: Request, db: Session = Depends(get_db), a
     if target.id == admin.id:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You cannot delete your own account here")
 
-    db.query(FileObject).filter(FileObject.owner_id == target.id).update({"owner_id": None})
-    db.query(FileShare).filter(FileShare.recipient_id == target.id).delete()
-    db.query(FileShare).filter(FileShare.owner_id == target.id).delete()
-    db.query(ApiKey).filter(ApiKey.user_id == target.id).delete()
     username = target.username
-    db.delete(target)
-    db.commit()
+    delete_users(db, [target.id])
     log_event(db, "ADMIN_USER_DELETED", request=request, user_id=admin.id, detail=f"target={username}")
+    return {"ok": True}
+
+
+@router.post("/{user_id}/unlock")
+def admin_unlock_user(user_id: str, request: Request, db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    """Clear every login lockout for an account (SEC-012)."""
+    _require_enabled()
+    target = db.get(User, user_id)
+    if target is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    lockout.clear_login_throttles(db, target.id)
+    target.failed_login_attempts = 0
+    target.login_locked_until = None
+    db.commit()
+    log_event(db, "ADMIN_USER_UNLOCKED", request=request, user_id=admin.id, detail=f"target={target.username}")
     return {"ok": True}

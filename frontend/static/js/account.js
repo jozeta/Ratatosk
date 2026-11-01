@@ -14,7 +14,24 @@
   function refreshMe() {
     return Promise.all([window.SDApi.get("/api/auth/me"), cfgPromise]).then(([me, cfg]) => {
       emailInput.value = me.email || "";
+      if (!me.password_login) {
+        // SSO account: the identity provider manages password and 2FA.
+        const pw = document.getElementById("changePasswordForm");
+        if (pw && pw.closest(".card")) pw.closest(".card").hidden = true;
+        document.getElementById("mfaCard").hidden = true;
+        document.getElementById("deleteConfirmLabel").textContent = `Type your username (${me.username}) to confirm`;
+        const del = document.getElementById("deleteAccountPassword");
+        del.type = "text";
+        del.autocomplete = "off";
+        del.dataset.sso = "1";
+      }
       setMfaView(me.mfa_enabled, !!cfg.enable_mfa);
+      if (!me.password_login) document.getElementById("mfaCard").hidden = true; // SSO: the IdP handles 2FA
+      const card = document.getElementById("discoverableCard");
+      if (card) {
+        card.hidden = !cfg.enable_user_sharing;
+        document.getElementById("discoverableToggle").checked = !!me.discoverable;
+      }
       return me;
     }).catch(() => {});
   }
@@ -70,8 +87,9 @@
     }
   });
 
-  document.getElementById("mfaCopySecretBtn").addEventListener("click", () => {
-    navigator.clipboard.writeText(document.getElementById("mfaManualSecret").value);
+  document.getElementById("mfaCopySecretBtn").addEventListener("click", (e) => {
+    const field = document.getElementById("mfaManualSecret");
+    window.SDUtil.copyText(field.value, e.currentTarget, field);
   });
 
   document.getElementById("mfaCancelSetupBtn").addEventListener("click", () => setMfaView(false));
@@ -100,9 +118,22 @@
     }
   });
 
-  document.getElementById("mfaCopyBackupCodesBtn").addEventListener("click", () => {
-    navigator.clipboard.writeText(pendingBackupCodes.join("\n"));
+  document.getElementById("mfaCopyBackupCodesBtn").addEventListener("click", (e) => {
+    window.SDUtil.copyText(pendingBackupCodes.join("\n"), e.currentTarget);
   });
+
+  const discoverableToggle = document.getElementById("discoverableToggle");
+  if (discoverableToggle) {
+    discoverableToggle.addEventListener("change", async () => {
+      try {
+        await window.SDApi.patch("/api/auth/discoverable", { discoverable: discoverableToggle.checked });
+        showAlert(discoverableToggle.checked ? "Others can now find you when sharing." : "You're no longer listed in the sharing directory.", "success");
+      } catch (err) {
+        discoverableToggle.checked = !discoverableToggle.checked;
+        showAlert(err.message);
+      }
+    });
+  }
 
   document.getElementById("mfaBackupCodesDoneBtn").addEventListener("click", () => {
     showAlert("Two-factor authentication enabled.", "success");
@@ -113,16 +144,20 @@
     mfaEnabledView.style.display = "none";
     mfaDisableForm.style.display = "";
     document.getElementById("mfaDisablePassword").value = "";
+    document.getElementById("mfaDisableCode").value = "";
   });
   document.getElementById("mfaCancelDisableBtn").addEventListener("click", () => setMfaView(true));
 
   mfaDisableForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     try {
-      await window.SDApi.post("/api/auth/mfa/disable", {
+      const res = await window.SDApi.post("/api/auth/mfa/disable", {
         password: document.getElementById("mfaDisablePassword").value,
+        code: document.getElementById("mfaDisableCode").value.trim(),
       });
-      showAlert("Two-factor authentication disabled.", "success");
+      // Other sessions were ended; this device continues with a fresh token.
+      window.SDApi.setSession(res.access_token, window.SDApi.getUser());
+      showAlert("Two-factor authentication disabled. Your other sessions were signed out.", "success");
       refreshMe();
     } catch (err) {
       showAlert(err.message);
@@ -174,9 +209,11 @@
   }
 
   document.getElementById("deleteAccountBtn").addEventListener("click", async () => {
+    const field = document.getElementById("deleteAccountPassword");
+    if (!field.value) { showAlert(field.dataset.sso ? "Type your username to confirm." : "Enter your password to confirm."); return; }
     if (!confirm("Permanently delete your account? This cannot be undone.")) return;
     try {
-      await window.SDApi.del("/api/auth/me");
+      await window.SDApi.del("/api/auth/me", field.dataset.sso ? { confirm_username: field.value } : { password: field.value });
       window.SDApi.clearSession();
       window.location.href = "/";
     } catch (err) {
@@ -269,7 +306,7 @@
       const copyBtn = document.createElement("button");
       copyBtn.className = "btn btn-outline btn-sm";
       copyBtn.textContent = "Copy";
-      copyBtn.addEventListener("click", () => navigator.clipboard.writeText(input.value));
+      copyBtn.addEventListener("click", () => window.SDUtil.copyText(input.value, copyBtn, input));
       field.appendChild(input);
       field.appendChild(copyBtn);
       newKeyResult.appendChild(label);

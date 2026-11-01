@@ -16,7 +16,10 @@ def log_event(
     user_id: str | None = None,
     actor_token: str | None = None,
     detail: str | None = None,
+    commit: bool = True,
 ) -> AuditLog | None:
+    """Record an audit event. Pass commit=False to add it to the caller's
+    transaction instead of paying for a separate commit (PERF-009)."""
     cfg = get_settings()
     if cfg.get("disable_audit_log"):
         return None
@@ -27,7 +30,9 @@ def log_event(
     ip = mask_ip(raw_ip, ip_level)
     ua = sanitize_user_agent(request.headers.get("user-agent") if request else None, zero_log)
 
-    ts = fuzz_timestamp(datetime.datetime.now(datetime.timezone.utc), cfg.get("timestamp_fuzzing", "none"))
+    ts = fuzz_timestamp(datetime.datetime.now(datetime.UTC), cfg.get("timestamp_fuzzing", "none"))
+    if zero_log:
+        actor_token = None  # zero-log means nothing links an event to anyone (SEC-002)
 
     entry = AuditLog(
         event_type=event_type,
@@ -40,5 +45,6 @@ def log_event(
         timestamp=ts,
     )
     db.add(entry)
-    db.commit()
+    if commit:
+        db.commit()
     return entry

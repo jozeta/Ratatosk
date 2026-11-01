@@ -3,7 +3,7 @@ import datetime
 import io
 import json
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
@@ -12,6 +12,7 @@ from app.core.security import require_admin
 from app.models.audit_log import AuditLog
 from app.models.user import User
 from app.schemas.audit import AuditLogEntry, AuditLogPage
+from app.services.audit_service import log_event
 
 router = APIRouter(prefix="/api/admin/audit", tags=["admin"])
 
@@ -43,6 +44,7 @@ def list_audit_logs(
     db: Session = Depends(get_db),
     admin: User = Depends(require_admin),
 ):
+    page, page_size = max(1, page), min(max(1, page_size), 500)
     q = _apply_filters(db.query(AuditLog), event_type, file_id, since, until, search)
     total = q.count()
     items = q.order_by(AuditLog.timestamp.desc()).offset((page - 1) * page_size).limit(page_size).all()
@@ -96,8 +98,12 @@ def export_audit_logs(
 
 
 @router.post("/prune")
-def prune_audit_logs(days: int = Query(90), db: Session = Depends(get_db), admin: User = Depends(require_admin)):
-    cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=days)
+def prune_audit_logs(request: Request, days: int = Query(90, ge=1, le=36500), db: Session = Depends(get_db), admin: User = Depends(require_admin)):
+    """Delete entries older than `days` (at least 1). The prune itself is
+    always recorded, so the log can't be wiped without leaving a trace
+    (SEC-015)."""
+    cutoff = datetime.datetime.now(datetime.UTC) - datetime.timedelta(days=days)
     deleted = db.query(AuditLog).filter(AuditLog.timestamp < cutoff).delete()
     db.commit()
+    log_event(db, "AUDIT_PRUNED", request=request, user_id=admin.id, detail=f"older_than_days={days} deleted={deleted}")
     return {"deleted": deleted}

@@ -1,6 +1,7 @@
 import smtplib
 import ssl
 from email.message import EmailMessage
+from typing import Any
 
 
 class EmailNotConfigured(Exception):
@@ -14,7 +15,7 @@ def send_email(cfg: dict, to_email: str, subject: str, body: str) -> None:
         raise EmailNotConfigured("SMTP host and from-address must be configured in Admin Settings")
 
     msg = EmailMessage()
-    from_name = cfg.get("smtp_from_name") or cfg.get("brand_name") or "SecureDrop"
+    from_name = cfg.get("smtp_from_name") or cfg.get("brand_name") or "Ratatosk"
     msg["From"] = f"{from_name} <{cfg['smtp_from_email']}>"
     msg["To"] = to_email
     msg["Subject"] = subject
@@ -26,6 +27,8 @@ def send_email(cfg: dict, to_email: str, subject: str, body: str) -> None:
     username = cfg.get("smtp_username") or None
     password = cfg.get("smtp_password") or None
 
+    smtp_cls: type[smtplib.SMTP]
+    kwargs: dict[str, Any]
     if encryption == "ssl":
         smtp_cls, kwargs = smtplib.SMTP_SSL, {"context": ssl.create_default_context()}
     else:
@@ -40,7 +43,7 @@ def send_email(cfg: dict, to_email: str, subject: str, body: str) -> None:
 
 
 def send_password_reset_email(cfg: dict, to_email: str, reset_url: str) -> None:
-    brand = cfg.get("brand_name") or "SecureDrop"
+    brand = cfg.get("brand_name") or "Ratatosk"
     expiry = cfg.get("password_reset_token_expiry_minutes", 60)
     subject = f"Reset your {brand} password"
     body = (
@@ -54,7 +57,7 @@ def send_password_reset_email(cfg: dict, to_email: str, reset_url: str) -> None:
 
 
 def send_download_notification_email(cfg: dict, to_email: str, size_bytes: int) -> None:
-    brand = cfg.get("brand_name") or "SecureDrop"
+    brand = cfg.get("brand_name") or "Ratatosk"
     subject = f"A file you shared on {brand} was downloaded"
     # The server never learns the original filename (zero-knowledge design),
     # so this can only describe the download, not name the file.

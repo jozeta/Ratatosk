@@ -10,7 +10,8 @@
     "max_file_size_mb", "chunk_size_mb", "max_concurrent_uploads", "extension_rule_mode",
     "default_ttl", "allow_custom_ttl", "allow_burn_after_download", "force_burn_after_download",
     "default_max_downloads", "allow_custom_max_downloads",
-    "storage_path", "total_storage_cap_gb", "cleanup_interval_minutes",
+    "total_storage_cap_gb", "cleanup_interval_minutes", "max_active_upload_sessions",
+    "rate_limit_enabled", "rate_limit_per_minute", "onion_address",
     "zero_log_mode", "ip_obfuscation_level", "timestamp_fuzzing",
     "audit_log_retention_days", "disable_audit_log", "max_login_attempts",
     "hide_upload_link", "hide_download_link",
@@ -33,7 +34,7 @@
     "allow_custom_ttl", "allow_burn_after_download", "force_burn_after_download", "allow_custom_max_downloads",
     "zero_log_mode", "disable_audit_log",
     "hide_upload_link", "hide_download_link", "custom_theme_enabled",
-    "smtp_enabled", "enable_download_notifications",
+    "smtp_enabled", "enable_download_notifications", "rate_limit_enabled",
   ]);
   const NUMBER_FIELDS = new Set([
     "password_min_length", "login_lockout_minutes",
@@ -41,6 +42,7 @@
     "total_storage_cap_gb", "cleanup_interval_minutes", "audit_log_retention_days", "max_login_attempts",
     "smtp_port", "password_reset_token_expiry_minutes",
     "custom_theme_heading_scale", "custom_theme_body_scale",
+    "max_active_upload_sessions", "rate_limit_per_minute",
   ]);
 
   function showAlert(message, type) {
@@ -131,7 +133,7 @@
       ? "A password is currently saved."
       : "No password saved.";
 
-    document.getElementById("brandPreviewName").textContent = cfg.brand_name || "SecureDrop";
+    document.getElementById("brandPreviewName").textContent = cfg.brand_name || "Ratatosk";
     const img = document.getElementById("logoPreviewImg");
     const fallback = document.getElementById("logoPreviewDefault");
     if (cfg.brand_logo_filename) {
@@ -165,6 +167,8 @@
     try {
       const cfg = await window.SDApi.get("/api/admin/settings");
       populate(cfg);
+      // Read-only: the storage location comes from RATATOSK_STORAGE_ROOT (SEC-010).
+      document.getElementById("storage_path").value = cfg.storage_path || "(set by RATATOSK_STORAGE_ROOT)";
     } catch (e) {
       showAlert(e.message, "danger");
     }
@@ -174,6 +178,7 @@
     try {
       const cfg = await window.SDApi.patch("/api/admin/settings", collect());
       populate(cfg);
+      document.getElementById("storage_path").value = cfg.storage_path || "(set by RATATOSK_STORAGE_ROOT)";
       showAlert("Settings saved and applied immediately.", "success");
     } catch (e) {
       showAlert(e.message, "danger");
@@ -281,8 +286,9 @@
     }
   });
 
-  document.getElementById("resetResultCopyBtn").addEventListener("click", () => {
-    navigator.clipboard.writeText(document.getElementById("resetResultPassword").value);
+  document.getElementById("resetResultCopyBtn").addEventListener("click", (e) => {
+    const field = document.getElementById("resetResultPassword");
+    window.SDUtil.copyText(field.value, e.currentTarget, field);
   });
   document.getElementById("resetResultGoToLoginBtn").addEventListener("click", () => {
     window.location.href = "/login";
