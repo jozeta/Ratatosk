@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SecureDrop - Register</title>
-<link rel="stylesheet" href="/static/css/app.css">
+<title>Ratatosk - Register</title>
+<link rel="stylesheet" href="/static/css/app.css" integrity="sha384-YetmR1azM/OlNBUGGGv1MKgZtyC1WcP/ovrT7LEul6zowoFeQF0lXLeo9qdpRg2x">
 </head>
 <body>
 
@@ -45,51 +45,13 @@
 
 <footer class="app-footer" id="sd-footer"></footer>
 
-<script src="/static/js/theme.js"></script>
-<script src="/static/js/api.js"></script>
-<script src="/static/js/layout.js"></script>
-<script src="/static/js/toast.js"></script>
-<script src="/static/js/tooltip.js"></script>
-<script src="/static/js/password-strength.js"></script>
-<script>
-(function () {
-  const form = document.getElementById("registerForm");
-  const passwordInput = document.getElementById("password");
-  let cfg = { password_min_length: 8 };
-
-  window.SDApi.get("/api/config").then((c) => {
-    cfg = c;
-    if (!cfg.allow_user_registration) {
-      document.getElementById("registerFormCard").hidden = true;
-      document.getElementById("registerDisabledNotice").hidden = false;
-      return;
-    }
-    window.SDPasswordStrength.attach(
-      passwordInput,
-      document.getElementById("strengthFill"),
-      document.getElementById("strengthLabel"),
-      document.getElementById("policyChecklist"),
-      cfg
-    );
-  }).catch(() => {
-    window.SDPasswordStrength.attach(passwordInput, document.getElementById("strengthFill"), document.getElementById("strengthLabel"), document.getElementById("policyChecklist"), cfg);
-  });
-
-  form.addEventListener("submit", async (e) => {
-    e.preventDefault();
-    try {
-      const res = await window.SDApi.post("/api/auth/register", {
-        username: document.getElementById("username").value,
-        email: document.getElementById("email").value.trim() || null,
-        password: passwordInput.value,
-      });
-      window.SDApi.setSession(res.access_token, { id: res.id, username: res.username, is_admin: res.is_admin });
-      window.location.href = "/files";
-    } catch (err) {
-      window.SDToast.danger(err.message);
-    }
-  });
-})();
-</script>
+<script src="/static/js/theme.js" integrity="sha384-nHvWqFZ1BnneONoX6ZPhrl4VABFF8xIUWBwbhH3cUOnUSiE3adAxGv7hWS2t52O0"></script>
+<script src="/static/js/api.js" integrity="sha384-Y9cUFpIQmvkj2Dod0H9JG7V5GxpTGFAbTZhJLHozPr7aj5lVBXYv/vTl5aw/Wecd"></script>
+<script src="/static/js/util.js" integrity="sha384-8vf+Et4kAE1vlYnPu6eqdHc87s/gPaMgEbQs6hTCrAoVrU/2+gwZsWn0PkQ+uzz9"></script>
+<script src="/static/js/layout.js" integrity="sha384-YuqiK8ghvkemv2WE11QDtksZ8NuCwmK48ous0Fqt2+DdNIy6TJ2nu4YXLJGzij9B"></script>
+<script src="/static/js/toast.js" integrity="sha384-rJf0ghcDDyTSRWuJBh0oIWI5018WpskKKJWc467cQKtx4Ol3ldIt8aL4iZXE6DTG"></script>
+<script src="/static/js/tooltip.js" integrity="sha384-FBe2v4AX/7O72bIXLhFw5BYfgyVliL0EXpnX2tj3gLPqle3aykCG8TnNAgPnRzk3"></script>
+<script src="/static/js/password-strength.js" integrity="sha384-IeP95lC7n09ihVrLVJYgmB4sIYrGSfMMPb5xIsvhZhnmFo4cZZxWkMY5wi/XyBQ+"></script>
+<script src="/static/js/page-register.js" integrity="sha384-Ke2NiS3Kbjx0ypaYWXEk7R2Gf52NHlmpdAgNsH0wceTPZoIYxMHCkB1Ws9CTLDTe"></script>
 </body>
 </html>

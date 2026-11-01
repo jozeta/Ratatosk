@@ -1,395 +1,325 @@
-# SecureDrop
+# Ratatosk
 
-A self-hosted, zero-knowledge encrypted file-sharing web application. Files are encrypted and decrypted entirely in the browser with the Web Crypto API (AES-256-GCM) — the server only ever stores and serves ciphertext. It never sees plaintext, filenames, or decryption keys.
+**Self-hosted, end-to-end encrypted file and message sharing.** Files are encrypted in the browser before upload and decrypted in the recipient's browser after download, with the Web Crypto API (AES-256-GCM). The server stores and serves ciphertext only: it never sees file contents, filenames, keys or passphrases.
 
-- **Zero-knowledge**: encryption/decryption happens client-side; decryption keys travel in the URL fragment (never sent over HTTP) or as a passphrase communicated out-of-band.
-- **Anonymity-first**: optional zero-log mode, IP masking, timestamp fuzzing, EXIF/metadata stripping, no third-party CDNs or trackers.
-- **Self-service admin panel**: every policy (retention, size limits, anonymity level, password rules, storage caps) is editable at runtime from `/admin/settings` — no restart required.
-- **Optional TOTP two-factor authentication**, with per-role enforcement (require it for regular users, admins, or both) and a self-service "Log out other sessions" that invalidates every other outstanding session token instantly.
-- **Audit logging**: filterable, exportable (CSV/JSON) log of uploads, downloads, admin changes, and failed-password lockouts, all respecting the configured privacy level.
-- **Automated test suite** (pytest) covering auth, MFA, upload/download policy enforcement, sharing IDOR checks, and admin settings — see [Running tests](#running-tests).
+> In Norse mythology, Ratatosk is the squirrel who runs up and down the world tree Yggdrasil carrying messages between the eagle and the dragon, delivering every message without being able to read it. That's this server's job.
+
+*Formerly "SecureDrop". Renamed in 2.0 to avoid confusion with the Freedom of the Press Foundation's whistleblower platform of that name. See [CHANGELOG.md](CHANGELOG.md).*
+
+**Current version:** 2.1.0 (see [Versioning](#versioning)).
+
+- **Zero-knowledge:** link keys travel in the URL `#fragment`, which browsers never send. Passphrases never leave the browser at all: the server only checks a token derived from them, which can't decrypt anything.
+- **Built for large files:** streaming, segmented encryption keeps memory flat in both directions. Uploads resume after a dropped connection or a page reload, and big downloads stream straight to disk.
+- **Privacy-first operation:** zero-log mode, IP masking, timestamp fuzzing, and lossless removal of location and author metadata from photos. No third-party scripts, fonts or trackers, so it's safe on an onion service.
+- **People can send you files, too:** a **request link** lets anyone, with no account needed, upload files that are encrypted to *your* key, so only you can open them.
+- **Account-to-account sharing is end-to-end:** each user can have their own encryption keypair, so shares between accounts are unreadable to the server.
+- **Operator controls:** every policy is editable live at `/admin/settings`. There's also an audit log, user and file management, two-factor authentication (optionally mandatory), **single sign-on (OIDC)**, scoped API keys and a CLI.
+- **Verifiable:** every script is pinned by hash, and `ratatosk verify` checks a live server against the published release.
 
 ---
 
-## Table of contents
+## Contents
 
 - [Features](#features)
-- [Architecture](#architecture)
-- [Requirements](#requirements)
-- [Quick start (local development)](#quick-start-local-development)
-- [Running with Docker](#running-with-docker)
-- [Running tests](#running-tests)
-- [Configuration](#configuration)
-  - [Environment variables (bootstrap config)](#environment-variables-bootstrap-config)
-  - [Runtime settings (admin panel)](#runtime-settings-admin-panel)
-- [Usage](#usage)
-  - [First-run setup](#first-run-setup)
-  - [Uploading a file](#uploading-a-file)
-  - [API keys / CLI upload](#api-keys--cli-upload)
-  - [Downloading a file](#downloading-a-file)
-  - [Accounts and "My Files"](#accounts-and-my-files)
-  - [Admin panel](#admin-panel)
-  - [Audit log](#audit-log)
 - [How the encryption works](#how-the-encryption-works)
+- [What you have to trust](#what-you-have-to-trust)
+- [Quick start](#quick-start)
+- [Running with Docker](#running-with-docker)
+- [Running as a Tor onion service](#running-as-a-tor-onion-service)
+- [Configuration](#configuration)
+- [Command-line client](#command-line-client)
+- [Using it](#using-it)
 - [API overview](#api-overview)
+- [Development](#development)
+- [Versioning](#versioning)
+- [Upgrading from SecureDrop 1.x](#upgrading-from-securedrop-1x)
 - [Project structure](#project-structure)
-- [Security notes](#security-notes)
 - [License](#license)
 
 ---
 
 ## Features
 
-**Cryptography**
-- AES-256-GCM via `window.crypto.subtle`, entirely client-side.
-- Two key-transport modes: a random key embedded in the URL hash fragment, or a key derived from a secondary passphrase via PBKDF2 (250,000 iterations, SHA-256).
-- Filename and MIME type are encrypted along with the file content, so the server never learns them either.
+**Sending**
+- Files of any size (up to the admin's limit), multiple files or whole folders, either one link per file or **several files behind one link**.
+- **Encrypted text messages**, shown in the recipient's browser with nothing to download.
+- Expiry presets, download limits, **burn after download**, and an optional **passphrase** as a second, out-of-band secret.
+- **Resumable uploads**: interrupted uploads continue where they stopped, including after a reload. Failed chunks retry automatically, and there's a Cancel button.
+- **Metadata removal**: JPEG, PNG and WebP are cleaned losslessly at the container level. Pixels are never re-encoded, and orientation and colour profiles are kept. Formats that can carry metadata the browser can't remove (HEIC, video, PDF, Office documents) are clearly flagged, and the sender must confirm before uploading them.
+- QR code for every share link.
 
-**Anonymity**
-- Client-side EXIF/GPS/author-metadata stripping for images (canvas re-encode) before encryption.
-- Server strips forwarding headers (`X-Forwarded-For`, `Referer`, `Client-IP`, etc.) before they reach any handler.
-- Configurable IP handling: `Strict None` (don't capture), `Masked Subnet` (/16 IPv4, /64 IPv6), or `Full IP`.
-- Configurable timestamp fuzzing (round to nearest hour/day) to blunt timing-correlation attacks.
-- Zero-log mode: uploads are recorded only as an anonymous `ANON_UPLOAD` event with no IP/UA/user link.
-- No third-party CDNs or fonts — every asset is self-hosted, safe for `.onion` / air-gapped deployment.
+**Receiving**
+- Download progress, and confirmation before a single-use file is destroyed.
+- The key or passphrase is **checked before anything is consumed**, so a mistyped passphrase or a truncated link never burns a file.
+- Large files **stream directly to disk** through a service worker instead of filling memory.
 
-**Access control & policy**
-- Toggle anonymous uploading, anonymous downloading, public registration, and public login independently — anonymous uploading/downloading off redirects an unauthenticated visitor straight to `/login` (instead of showing a form that will just fail), and hides the Upload/Download links from the nav bar for anyone not logged in; login off still leaves admin accounts able to sign in at `/login` directly. Registration off replaces the register page with a "Registration is closed" notice and hides the "Register" link on the login page.
-- **Two-factor authentication (TOTP)**: an admin-wide on/off switch, plus independent "enforce for regular users" and "enforce for admins" toggles. When enforcement is on, anyone without MFA set up is required to complete setup (scan a QR code, confirm a code, save one-time backup codes) as the very next step after their password, before a session token is issued.
-- Account login rate limiting: lock an account out for a configurable number of minutes after too many failed password *or MFA code* attempts in a row. Independently toggle-able; applies to every account, including admins.
-- Enforce (or entirely disable) a secondary passphrase on every upload, with a configurable password policy (minimum length, required character classes) applied to registration, admin-created accounts, password resets, and self-service password changes.
-- Configurable max file size, chunk size, concurrent-upload limit, and an interactive extension allow/deny list (add/remove chips in the admin UI, no more comma-editing).
-- Configurable TTL presets (same chip-list UI) and default TTL — optionally lock every upload to the default, fixed, hiding the "Expires after" field from uploaders.
-- Burn-after-download and max-download counts — the max-download count can likewise be locked to a fixed default instead of left to the uploader.
-- Total storage cap with automatic rejection at 95% usage, and a background worker that purges expired/exhausted files on a configurable interval.
-- Multi-file and folder upload, independently toggle-able: select or drag-drop any number of files (or a whole folder, traversed recursively client-side) into a queue, each encrypted and uploaded separately with its own share link.
+**Accounts** (optional; anonymous use can stay enabled)
+- "My Files" with **link management**: switch a link off and on, expire it now, lower its download limit, or unlock it after failed passphrase guesses.
+- **Two-factor authentication (TOTP)**: codes are single-use, backup codes are provided, and admins can make it mandatory per role.
+- **End-to-end encryption keys**: set up a keypair under Profile, protected by an *encryption passphrase* that never leaves your browser (deliberately separate from the login password). Unlocked keys can be remembered per device as non-extractable keys until logout.
+- **User-to-user sharing**: share with other accounts, who open the file just by signing in. For recipients with keys this is end-to-end: the file key is wrapped to their public key, and the server can't open it. For recipients without keys, the site can fall back to a server-held key (admin setting, and the dialog warns you). The directory of users is opt-in, and anyone can be added by exact username.
+- **Request links** (`/requests`): create a "send me files" link with a description, expiry, file-count limit and retention. Anyone with the link can send files with no account needed. The link carries your key's fingerprint, so the sender's browser refuses to encrypt if the server ever substituted a different key. Received files appear only in your inbox.
+- **Single sign-on** with any OpenID Connect provider (Keycloak, Authentik, Entra ID, Google, Okta and others): authorization code flow with PKCE, optional admin-group mapping and opt-in linking by verified email.
+- **API keys** (full or upload-only) for the [CLI](#command-line-client) and scripts.
+- Download notifications by email. These describe size and time only, since the server never knows the filename.
 
-**Account self-service**
-- Registered users can change their own password (with a live strength meter and policy checklist) or delete their own account from `/account`. Deleting an account orphans (doesn't delete) their previously shared files so existing links keep working.
-- Changing your password immediately invalidates every other session token for the account (a stolen or shared-device token stops working on its very next request), and a fresh token is issued so the device you changed it from stays logged in. A separate **"Log out other sessions"** button does the same thing on demand, without requiring a password change.
-- **API keys** (`/account`, independently toggle-able as "API keys" in settings): generate high-entropy tokens for scripted/CLI uploads without a browser — see [`cli/securedrop_upload.py`](#api-keys--cli-upload) below. Each key is created with a scope: **Full access** (equivalent to being logged in as you) or **Upload only** (can call the upload endpoints and nothing else — safe to hand to a script or CI pipeline). Revoking a key takes effect immediately; keys are shown once, at creation.
-- **Download notifications**: when uploading (while logged in, and if enabled site-wide), opt in to an email each time that specific file is downloaded. Requires SMTP to be configured; the email reports size and time only — the server never learns the real filename, so it can't include it.
+**Operators**
+- Every policy is editable at runtime and applies to every server process within a second.
+- Audit log with filters and CSV/JSON export, respecting the configured privacy level. Retention is applied automatically, and pruning is itself always recorded.
+- Statistics, user and file management, branding (logo, name, footer, colour theme), and a factory reset.
+- Abuse protection:
+  - per-network rate limiting
+  - brute-force limits that hold under parallel requests
+  - login lockouts that only affect the guessing network, so nobody can lock the admin out
+  - a storage cap that accounts for uploads in progress
+  - a server-wide cap on active uploads
+- Local-disk or S3-compatible storage (AWS S3, MinIO, Backblaze B2 and others).
 
-**User-to-user sharing** (`/shared`, independently toggle-able as "User-to-user sharing" in settings)
-- Right after uploading a file (as a logged-in user, without a secondary passphrase), pick specific registered accounts from a list to share it with directly.
-- This is a distinct, opt-in pathway from the normal zero-knowledge link flow: to make "just log in and see it" possible with no link or passphrase exchange, the client-side key is stored server-side, scoped to that specific share. Only the file's owner and the chosen recipients can ever retrieve it (checked on every request) — direct link/passphrase sharing is unaffected and stays fully zero-knowledge. Passphrase-protected files can't be shared this way, since the server never has that key to begin with.
-- Recipients see everything shared with them at `/shared` — file size, who shared it, everyone else it's shared with, and a one-click decrypt/download.
-- Owners see who a file is shared with from `/files` and can revoke access per-recipient at any time.
-
-**Admin tooling**
-- **User Management** (`/admin/users`, independently toggle-able): create users, rename accounts, promote/demote admin status, activate/deactivate accounts, reset passwords, delete users.
-- **File Management** (`/admin/files`, independently toggle-able): view and delete any file on the platform, regardless of owner.
-- **Statistics** (`/admin/stats`): active file count, all-time upload/download counts, registered users, a grouped bar chart of uploads vs. downloads over a selectable range (7 days / 30 days / 6 months / 1 year), an SVG pie chart of storage used vs. the configured cap, an SVG pie chart of active files by extension, and event totals (burned/expired/deleted).
-- **Branding**: replace the top-left mark with a custom logo (PNG/JPEG/WebP/SVG/ICO, max 2MB) and brand name, and edit the footer text — all from the top of `/admin/settings`. With no logo uploaded, a self-hosted default padlock mark is used (no external icon font or emoji dependency).
-- Brute-force lockout on secondary-password attempts.
-- Filterable, paginated audit log with CSV/JSON export and configurable retention/pruning.
-- **Danger Zone — full factory reset** (`/admin/settings#danger-zone`): wipes every user, file, share, API key, and setting back to defaults in one action. Requires re-entering the acting admin's current password and typing a confirmation phrase. Irreversible — the acting admin's own account is deleted as part of the wipe (which invalidates their session on the very next request), a fresh admin account is bootstrapped with a random password, and that password is shown exactly once in a modal after the reset completes.
-- All of the above is editable live from `/admin/settings` and takes effect immediately.
-
----
-
-## Architecture
-
-- **Backend**: Python, [FastAPI](https://fastapi.tiangolo.com/) + [SQLAlchemy](https://www.sqlalchemy.org/) ORM, SQLite by default.
-- **Frontend**: Semantic HTML5, vanilla ES6+ JavaScript, and a small hand-written CSS framework (no Bootstrap/jQuery/CDN dependency) with a light/dark theme toggle.
-- **Storage**: pluggable backend behind a small interface — local filesystem by default (`./storage/encrypted/`), or an S3-compatible bucket (AWS S3, MinIO, Backblaze B2, etc.) via `SECUREDROP_STORAGE_BACKEND=s3`; see [Environment variables](#environment-variables-bootstrap-config). A background asyncio task purges expired files regardless of backend.
-- **Auth**: JWT bearer tokens, stored in the browser's `localStorage`. Each token embeds a version number tied to the account; changing your password or hitting "Log out other sessions" bumps it, instantly invalidating every token issued before that moment.
-
-```
-Browser (encrypt/decrypt)  <-- ciphertext only -->  FastAPI  <-->  SQLite (metadata) + filesystem (blobs)
-```
-
----
-
-## Requirements
-
-- Python 3.11+ (developed against 3.13)
-- pip
-- (Optional) Docker + Docker Compose, for containerized deployment
-- (Optional) `boto3` (`pip install -r requirements-s3.txt`), only if using the S3-compatible storage backend
-- (Optional) `pytest` + `httpx` (`pip install -r requirements-dev.txt`), only if running the test suite
-
----
-
-## Quick start (local development)
-
-```bash
-# 1. Clone / enter the project directory
-cd SecureDrop
-
-# 2. Create and activate a virtual environment
-python -m venv .venv
-# Windows (PowerShell/Git Bash):
-.venv\Scripts\activate
-# macOS/Linux:
-source .venv/bin/activate
-
-# 3. Install dependencies
-pip install -r requirements.txt
-
-# 4. Initialize the database and create the default admin account
-python -m app.init_db
-# Prints a one-time generated admin password to the console — save it now,
-# it is never shown again and is not stored anywhere in the app.
-
-# 5. Start the server
-uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
-```
-
-Open **http://127.0.0.1:8000** in your browser. Log in at `/login` with the admin credentials printed in step 4 to reach `/admin/settings` and `/admin/audit`.
-
-To stop: `Ctrl+C`. To reset everything: stop the server, delete `securedrop.db` and the contents of `storage/encrypted/` and `storage/tmp/`, then repeat steps 4–5.
-
----
-
-## Running with Docker
-
-```bash
-# 1. Copy the example environment file and fill in a real secret key
-cp .env.example .env
-# Edit .env: set SECUREDROP_SECRET_KEY to a random 32+ character string
-# (e.g. `python -c "import secrets; print(secrets.token_urlsafe(32))"`)
-
-# 2. Build and start
-docker-compose up --build
-```
-
-This builds the image, runs `python -m app.init_db` on container start (idempotent — safe to restart), and serves the app on **http://localhost:8000**. The admin password is printed to the container logs on first run:
-
-```bash
-docker-compose logs securedrop | grep -A3 "Created default admin"
-```
-
-Data persists across restarts via two bind-mounted host directories:
-
-| Host path   | Container path       | Contents                                   |
-|-------------|-----------------------|---------------------------------------------|
-| `./data`    | `/app/data`            | `securedrop.db` (SQLite metadata)           |
-| `./storage` | `/app/storage`         | Encrypted blobs and in-progress uploads     |
-
-To stop: `docker-compose down`. To wipe all data: also delete `./data` and `./storage`.
-
----
-
-## Running tests
-
-```bash
-pip install -r requirements-dev.txt
-pytest -v
-```
-
-The test suite runs against a completely isolated, temporary SQLite database and storage directory — created fresh per test via `tests/conftest.py`, using the app's own real startup path (the same table creation and migration code that runs on a normal boot), and torn down afterward. It never touches your real `securedrop.db` or `storage/` directory, no matter what's in your working copy when you run it.
-
----
-
-## Configuration
-
-SecureDrop has two layers of configuration:
-
-1. **Bootstrap config** (environment variables) — read once at process startup. Covers things the app needs before the database is even available: where the database lives, the JWT signing secret, the default admin account.
-2. **Runtime settings** (database-backed, admin panel) — every operational policy (limits, retention, anonymity level, etc.). Editable live at `/admin/settings`, applied immediately to the running server, no restart needed.
-
-### Environment variables (bootstrap config)
-
-All variables are prefixed `SECUREDROP_` and can be set directly or via a `.env` file in the project root (see `.env.example`).
-
-| Variable                          | Default                              | Description                                                                 |
-|------------------------------------|---------------------------------------|-------------------------------------------------------------------------------|
-| `SECUREDROP_DATABASE_URL`          | `sqlite:///./securedrop.db`           | SQLAlchemy database URL.                                                     |
-| `SECUREDROP_STORAGE_ROOT`          | `./storage/encrypted`                 | Directory where encrypted blobs are written.                                 |
-| `SECUREDROP_TMP_ROOT`              | `./storage/tmp`                       | Directory for in-progress chunked uploads.                                   |
-| `SECUREDROP_SECRET_KEY`            | *(insecure placeholder — change me)*  | Secret used to sign JWT session tokens. **Must** be overridden in production. |
-| `SECUREDROP_JWT_ALGORITHM`         | `HS256`                               | JWT signing algorithm.                                                       |
-| `SECUREDROP_JWT_EXPIRE_MINUTES`    | `720` (12h)                           | Session token lifetime.                                                      |
-| `SECUREDROP_FRONTEND_DIR`          | `./frontend`                          | Path to the frontend HTML/CSS/JS bundle.                                     |
-| `SECUREDROP_DEFAULT_ADMIN_USERNAME`| `admin`                               | Username created by `app.init_db` if no admin exists yet.                    |
-| `SECUREDROP_DEFAULT_ADMIN_PASSWORD`| *(blank — auto-generated)*            | Set this to pin a known admin password instead of generating a random one.   |
-| `SECUREDROP_STORAGE_BACKEND`       | `local`                               | `local` (default) or `s3`. Kept as an env var rather than an admin-panel setting so cloud credentials never end up stored in the database. |
-| `SECUREDROP_S3_BUCKET`             | *(empty)*                             | Required if `STORAGE_BACKEND=s3`.                                             |
-| `SECUREDROP_S3_REGION`             | *(empty)*                             | AWS region, or blank for non-AWS S3-compatible services.                     |
-| `SECUREDROP_S3_ENDPOINT_URL`       | *(empty)*                             | Set for non-AWS S3-compatible services (MinIO, Backblaze B2, etc.).          |
-| `SECUREDROP_S3_ACCESS_KEY_ID` / `SECUREDROP_S3_SECRET_ACCESS_KEY` | *(empty)* | Credentials, if not relying on the environment's default AWS credential chain. |
-| `SECUREDROP_S3_PREFIX`             | *(empty)*                             | Optional key prefix within the bucket, e.g. `prod/`.                         |
-
-> **Production checklist:** always set a real `SECUREDROP_SECRET_KEY`; consider setting `SECUREDROP_DEFAULT_ADMIN_PASSWORD` explicitly if you're scripting deployment; put the app behind HTTPS (the browser's Web Crypto API and clipboard access require a secure context in production, i.e. HTTPS or `localhost`).
-
-### Runtime settings (admin panel)
-
-Log in as an admin and visit **`/admin/settings`**. Changes save to the database and take effect immediately for every subsequent request — no restart, no redeploy.
-
-| Section | Setting | Notes |
-|---|---|---|
-| **Access & Authentication** | Anonymous uploading | Allow drop-and-go uploads without an account. |
-| | Anonymous downloading | Off = force login before any file can be downloaded. |
-| | User registration | Public sign-ups vs. invite-only (an admin can still create accounts directly from User Management either way). |
-| | User login | Off = only admin accounts can log in; the `/login` page itself stays reachable (just unlinked from the nav) so an admin can still sign in manually. |
-| | Allow secondary passphrase | Off removes the passphrase option from the upload form entirely (and turns off "Enforce" below, since there'd be nothing to enforce). |
-| | Enforce secondary password | Force every uploader to set a passphrase. |
-| | User-to-user sharing | Off disables `/shared`, the "Share with specific users" panel, and their APIs entirely. |
-| | Enable MFA | Master switch for TOTP two-factor authentication. Off hides the "Enable 2FA" option on `/account`; anyone who already had it on keeps the option to turn it back off. |
-| | Enforce MFA for users / for admins | Independent toggles. When on for a role, anyone in that role without MFA already set up is required to complete setup as the next step after their password, before a session token is issued. |
-| **Login Security** | Account login rate limiting | Lock an account out after too many failed logins in a row. Uses the "Max login/password attempts" value from Audit & Security below. |
-| | Lockout duration (minutes) | How long an account stays locked before it can try again on its own. |
-| **Admin Feature Views** | User management | Show/hide the `/admin/users` page and its API entirely. |
-| | File management | Show/hide the `/admin/files` page and its API entirely. |
-| | API keys | Allow users to create API keys for CLI/scripted uploads from `/account`. Off immediately stops all existing keys from working too. |
-| **Password Policy** | Minimum length | Applied to registration, admin-created users, password resets, and self-service changes. |
-| | Require uppercase / lowercase / number / special character | Each is an independent toggle; the register and account pages show a live checklist against the active policy. |
-| **Upload & File Constraints** | Max file size (MB) | Enforced both client- and server-side. |
-| | Chunk size (MB) | Size of each chunk streamed during upload. |
-| | Max concurrent uploads | Per-uploader in-flight upload limit. |
-| | Multi-file / folder upload | Let the upload page accept more than one file at once (including whole folders dropped in), queuing and encrypting each separately. Off restricts the page to one file at a time. |
-| | Extension rule mode + list | Blacklist (block listed extensions) or whitelist (only allow listed) — edited as add/remove chips, not a raw comma-separated field. |
-| **Retention & Expiration** | Allowed TTL presets | Chip-list UI; each entry is a number plus `m`/`h`/`d` (minutes/hours/days), e.g. `10m`, `24h`, `7d`. |
-| | Default TTL | Pre-selected in the uploader UI. |
-| | Allow custom expiration | Off hides the "Expires after" field entirely; every upload uses the Default TTL, fixed. |
-| | Allow / force burn-after-download | Delete immediately after the first successful download. |
-| | Allow custom max downloads | Off hides the "Max downloads" field entirely; every upload uses the default below, fixed. |
-| | Default max downloads | `0` = unlimited. |
-| **Local Storage Engine** | Storage path | Disk directory for encrypted blobs. Only applies to the local backend — see `SECUREDROP_STORAGE_BACKEND` in [Environment variables](#environment-variables-bootstrap-config) for S3. |
-| | Total storage cap (GB) | New uploads are rejected once usage would exceed 95% of this cap. |
-| | Cleanup interval (minutes) | How often the background worker purges expired/exhausted files. |
-| **Email (SMTP)** | Enable password reset emails | Turns on the "Forgot password?" link and the email-sending machinery behind it. |
-| | Enable download notifications | Site-wide switch for the per-file "Notify me when downloaded" option on the upload page. Still requires password reset emails (above) to be on, since it shares the same SMTP configuration. |
-| | SMTP host / port / username / password / encryption / from-address / from-name | Standard SMTP client settings; a "Send test email" button is available once configured. |
-| **Extreme Anonymity Engine** | Zero-log mode | Disable IP/user-agent/precise-timestamp logging for uploads entirely. |
-| | IP obfuscation level | `Strict None` / `Masked Subnet` (/16 or /64) / `Full IP`. |
-| | Timestamp fuzzing | `None` / round to nearest hour / round to nearest day. |
-| **Audit & Security** | Audit log retention (days) | Used by the "Prune" action on `/admin/audit`. |
-| | Max login/password attempts | Threshold before an account or a password-protected file is locked out. |
-
----
-
-## Usage
-
-### First-run setup
-
-The first time an admin logs in with `setup_completed` still unset, they're redirected to `/admin/setup` — a short wizard covering branding (logo, name, footer), then the access & security settings that matter most for a first deployment (anonymous upload/download, public registration, login rate limiting). Every choice can be changed later from `/admin/settings`; "Skip setup" marks it done without changing anything. Subsequent admin logins go straight to `/admin/settings`.
-
-### Uploading a file
-
-1. Go to `/` (or click **Upload** in the nav bar).
-2. Drag one or more files (or, with multi-file upload enabled, a whole folder) onto the drop zone, or click it to browse. Each file appears in a queue with its size and a remove button.
-3. Choose an expiration, optionally set a max download count, burn-after-download, and/or a secondary passphrase — these apply to every file in the queue.
-4. Click **Encrypt & Upload**. Each file is stripped of image metadata (if applicable), encrypted in your browser, and uploaded in chunks, one at a time.
-5. For a single file, you'll get a share link, a QR code, and — unless you set a passphrase — a decryption key (already embedded in the link's `#fragment`). For two or more files, you'll get a table with one link per file. Share the link(s) (and, if applicable, the passphrase, through a different channel) with the recipient.
-
-### API keys / CLI upload
-
-Logged-in users can generate an API key from `/account` (if enabled in settings) for uploading without a browser — useful for scripts, cron jobs, or CI. Pick a scope at creation time: **Full access** works exactly like a login token, while **Upload only** can call the upload endpoints and nothing else — the safer choice to hand to an untrusted script or pipeline. Treat a key like a password regardless of scope: it's shown once, at creation.
-
-```bash
-export SECUREDROP_API_KEY=sdk_...
-python cli/securedrop_upload.py --server http://localhost:8000 ./report.pdf --ttl 24h --max-downloads 3
-```
-
-The CLI performs the same client-side AES-256-GCM encryption as the browser (matching wire format), so uploads made this way are just as zero-knowledge — the server never sees the key or plaintext. Run `python cli/securedrop_upload.py --help` for all options (`--password` for passphrase mode, `--burn`, etc.).
-
-### Downloading a file
-
-- **Direct link**: open the `https://.../share/<file_id>#<key>` link you were given, then click **Decrypt & Download**. If the file requires a passphrase instead, you'll be prompted for it.
-- **Manual lookup**: go to `/download`, and enter the File ID plus the decryption key or passphrase by hand.
-
-### Accounts and "My Files"
-
-Registering an account (if enabled) lets you track and manage your own uploads at `/files` — remaining TTL, download counts, who it's shared with (with one-click revoke), and one-click deletion — without changing how encryption works (the server still never sees plaintext). From `/account`, any logged-in user can change their own password (live strength meter + policy checklist), enable/disable two-factor authentication, sign out every other session with one click, manage API keys, or delete their own account. Files shared directly with you by another user (see [User-to-user sharing](#features)) show up at `/shared`, ready to decrypt with one click.
-
-### Admin panel
-
-- `/admin/settings` — see [Runtime settings](#runtime-settings-admin-panel) above.
-- `/admin/users` — create users, rename accounts, promote/demote admin status, activate/deactivate, reset passwords, or delete accounts. Can be hidden entirely via the "User management" toggle in settings.
-- `/admin/files` — view and delete any file on the platform regardless of owner. Can be hidden entirely via the "File management" toggle in settings.
-- `/admin/stats` — active files, all-time upload/download counts, registered users, a bar chart of uploads/downloads over a selectable time range, a storage-used-vs-cap pie chart, and a file-extension pie chart.
-
-### Audit log
-
-`/admin/audit` — filter by event type, file ID, or free-text search; export the current filter as CSV or JSON; prune entries older than 30/90/180 days.
+**Deliberately not included:** server-side virus scanning. A server that can scan files can read them, so it's incompatible with zero-knowledge. Treat files from strangers with the usual care.
 
 ---
 
 ## How the encryption works
 
-1. The browser generates a random AES-256 key (or derives one from a passphrase via PBKDF2, if secondary-password mode is used).
-2. The original filename, MIME type, and file bytes are packed into a small envelope and encrypted with AES-256-GCM.
-3. The resulting ciphertext (with a version flag, any PBKDF2 salt, and the GCM IV prepended) is what actually gets uploaded, chunked, and stored — the server only ever handles this opaque blob.
-4. **Random-key mode**: the raw key is base64url-encoded into the URL's `#fragment`, which browsers never include in HTTP requests — the server truly never sees it.
-5. **Passphrase mode**: no key travels in the URL at all. The recipient must be given the passphrase separately; the server additionally stores a bcrypt hash of it purely to rate-limit and lock out online guessing against the download endpoint — that hash cannot be used to derive the decryption key.
-6. On download, the browser fetches the ciphertext and reverses the process locally with `crypto.subtle.decrypt` — AES-GCM's built-in authentication tag means a wrong key/passphrase fails loudly instead of silently returning garbage.
+1. **One secret per file.** In link mode the browser generates a random 256-bit secret. In passphrase mode the secret is `PBKDF2-SHA256(passphrase, random salt, 600,000 iterations)`, which is OWASP's current recommendation. The iteration count is stored per file, so it can be raised later.
+2. **The secret is split with HKDF-SHA256** into two independent values:
+   - the **AES-256-GCM file key**, which never leaves the browser;
+   - a **download token**. The server stores `SHA-256(token)` and requires the token before it serves the ciphertext.
+
+   Knowing the token reveals nothing about the file key. So the server can check that a downloader holds the secret without ever being able to decrypt. This is the same idea Firefox Send used.
+3. **The envelope** (`{name, type, size}` plus the file bytes) is encrypted in **1 MiB segments** using the STREAM construction:
+   - each segment's IV includes its index, so segments can't be reordered;
+   - each segment is authenticated with the header and a "final segment" flag, so it can't be truncated or have its header swapped.
+4. **Only ciphertext is uploaded**, chunk by chunk as it's produced, with each chunk addressed by its byte offset. Retries are therefore harmless, and an interrupted upload can resume anywhere, because the ciphertext is a pure function of the key, nonce and plaintext.
+5. **Link mode:** the secret goes in the link after `#`. **Passphrase mode:** nothing secret is in the link. Share the passphrase separately.
+6. **Download:** the browser derives the token, checks it with the server, then decrypts the segments as they arrive.
+
+The full byte-level format is documented at the top of [`frontend/static/js/crypto.js`](frontend/static/js/crypto.js). The CLI implements it byte-for-byte, and a test checks that the two interoperate. Files uploaded with every earlier format still decrypt.
+
+## What you have to trust
+
+- **The code your browser runs comes from the server.** An operator who wanted to (or was compelled to) could serve modified JavaScript that captures keys. This is inherent to all browser-based encryption. Ratatosk makes it **detectable**: every script and stylesheet is pinned with Subresource Integrity, and `ratatosk verify https://server --expect <digest>` checks, from your own machine, that the server serves exactly the release whose digest is published in [CHANGELOG.md](CHANGELOG.md). For the highest assurance, use the CLI, which encrypts locally and runs no server-supplied code.
+- **Metadata the server does see:** encrypted file sizes, upload and download times, the declared file extension (used for allow/deny rules), and network addresses, unless the operator enables zero-log mode or IP masking.
+- **User-to-user sharing** is end-to-end when the recipient has encryption keys. Only shares to recipients *without* keys store that file's key on the server, if the admin allows it. The key is released as soon as no such share needs it. Link, passphrase and request-link sharing never store keys.
+- **Sessions** use an HttpOnly, `SameSite=Strict` cookie that page scripts can't read, and state-changing requests need a CSRF header. API clients use bearer tokens.
+- Serve it over **HTTPS** (or as an onion service). HSTS is sent automatically on HTTPS, along with a strict Content-Security-Policy that only allows scripts from the site itself.
+
+The project has had an internal engineering audit ([docs/AUDIT.md](docs/AUDIT.md)) but **no independent professional security audit**. Review it before relying on it for high-risk use.
 
 ---
+
+## Quick start
+
+Requires **Python 3.11+**.
+
+```bash
+python -m venv .venv
+source .venv/bin/activate            # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+
+cp .env.example .env                 # then set RATATOSK_SECRET_KEY:
+python -c "import secrets; print(secrets.token_hex(32))"
+
+python -m app.init_db                # runs migrations, prints a one-time admin password
+uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+Open http://127.0.0.1:8000 and sign in at `/login` with the printed admin credentials. The first admin login opens a short setup wizard.
+
+If every admin is ever locked out: `python -m app.unlock <username>` (or `--all`).
+
+## Running with Docker
+
+```bash
+cp .env.example .env    # set RATATOSK_SECRET_KEY
+docker compose up -d --build
+docker compose logs ratatosk | grep -A3 "Created default admin"
+```
+
+The image runs as a non-root user on a read-only filesystem, installs hash-verified dependencies (`requirements.lock`) on a digest-pinned base image, and has a health check. Data lives in `./data` (database) and `./storage` (encrypted blobs).
+
+Behind a reverse proxy, terminate TLS there and set `FORWARDED_ALLOW_IPS` to the proxy's address, so the app knows requests arrived over HTTPS. Allow request bodies of at least the configured chunk size (5 MB by default).
+
+## Running as a Tor onion service
+
+```bash
+docker compose --profile tor up -d --build
+docker compose exec tor cat /var/lib/tor/ratatosk/hostname
+```
+
+Enter that address under **Admin Settings → Tor onion address**. Pages served on the regular domain then advertise it with an `Onion-Location` header, so Tor Browser offers to switch. See [docs/TOR.md](docs/TOR.md) for details and hardening tips.
+
+---
+
+## Configuration
+
+Two layers: **environment variables** for what's needed before the database is available or must never be web-editable, and **runtime settings** in the admin panel for everything else.
+
+### Environment variables
+
+Prefix `RATATOSK_`, set directly or in `.env`. Older `SECUREDROP_*` names still work, with a deprecation warning.
+
+| Variable | Default | Description |
+|---|---|---|
+| `RATATOSK_SECRET_KEY` | *(none; required)* | Signs session tokens. The app refuses to start with the placeholder. |
+| `RATATOSK_DATABASE_URL` | `sqlite:///./ratatosk.db` | SQLAlchemy URL. An existing `securedrop.db` is picked up automatically. |
+| `RATATOSK_STORAGE_ROOT` | `./storage/encrypted` | Where encrypted blobs are written (local backend). Deliberately not editable in the web UI. |
+| `RATATOSK_TMP_ROOT` | `./storage/tmp` | Staging for uploads in progress (always local). |
+| `RATATOSK_BRANDING_ROOT` | `./storage/branding` | Uploaded logo. |
+| `RATATOSK_JWT_EXPIRE_MINUTES` | `720` | Session lifetime. Logout revokes a session immediately. |
+| `RATATOSK_DEFAULT_ADMIN_USERNAME` / `_PASSWORD` | `admin` / *random* | First admin, created by `init_db`. |
+| `RATATOSK_OIDC_ISSUER`, `_CLIENT_ID`, `_CLIENT_SECRET` | *(unset)* | Enable single sign-on. Register `<site>/api/auth/oidc/callback` as the redirect URL at your provider (override with `RATATOSK_OIDC_REDIRECT_URL`). |
+| `RATATOSK_OIDC_ADMIN_GROUP` / `_GROUPS_CLAIM` | *(unset)* / `groups` | Members of this group are admins, re-checked at every SSO login. The last admin is never demoted. |
+| `RATATOSK_OIDC_AUTO_PROVISION` / `_LINK_BY_EMAIL` | `true` / `false` | Create accounts on first SSO login; link to an existing local account with the same verified email (off by default, because whoever controls the provider could otherwise take over local accounts). |
+| `RATATOSK_OIDC_SCOPES` / `_BUTTON_LABEL` | `openid email profile` / `Sign in with SSO` | |
+| `RATATOSK_STORAGE_BACKEND` | `local` | `local` or `s3`. For `s3`: `RATATOSK_S3_BUCKET`, `_REGION`, `_ENDPOINT_URL`, `_ACCESS_KEY_ID`, `_SECRET_ACCESS_KEY`, `_PREFIX`; also run `pip install -r requirements-s3.txt`. |
+
+### Runtime settings (admin panel)
+
+At **`/admin/settings`**, changes apply immediately to every server process.
+
+| Section | Settings |
+|---|---|
+| Access | Anonymous upload / download, registration, user login, secondary passphrase (allow / enforce), user-to-user sharing (and whether recipients without keys may get server-held keys), request links, API keys, multi-file upload |
+| Two-factor | Enable; enforce for users; enforce for admins |
+| Login security | Rate limiting, lockout duration, max attempts (logins and file passphrases) |
+| Abuse limits | Per-network requests per minute; max concurrent uploads per uploader; max uploads in progress server-wide |
+| Password policy | Minimum length (8+), required character classes |
+| Uploads | Max file size, chunk size (1-64 MB), extension allow/deny list |
+| Retention | TTL presets and default, custom expiry on/off, burn after download (allow/force), download limits |
+| Storage | Storage cap (rejects uploads above 95%), cleanup interval; storage location shown read-only |
+| Privacy | Zero-log mode, IP masking (`none` / `masked` / `full`), timestamp fuzzing |
+| Audit | Retention in days (applied automatically), disable audit log |
+| Email | SMTP settings, password-reset emails, download notifications, test email |
+| Tor | Onion address for the `Onion-Location` header |
+| Branding | Logo, name, footer text, custom colour theme, hide nav links |
+
+Every numeric setting is validated with bounds, so a typo can't take the service down.
+
+---
+
+## Command-line client
+
+`cli/ratatosk.py` uses the same encryption as the browser, so the server never sees plaintext or keys. It needs `pip install cryptography`.
+
+```bash
+export RATATOSK_API_KEY=sdk_...                   # create one at /account (Upload-only is enough to upload)
+python cli/ratatosk.py upload --server https://drop.example.com --ttl 7d report.pdf
+python cli/ratatosk.py upload --server https://drop.example.com --password 'long passphrase' --burn secrets.zip
+tar cz project/ | python cli/ratatosk.py upload --server https://drop.example.com --stdin --name project.tgz
+
+python cli/ratatosk.py download 'https://drop.example.com/share/<id>#<key>'
+python cli/ratatosk.py download 'https://drop.example.com/share/<id>' --password '...' -o out.pdf
+python cli/ratatosk.py verify https://drop.example.com --expect <release digest from CHANGELOG.md>
+python cli/ratatosk.py --version                  # add --json to any command for machine-readable output
+```
+
+The old `cli/securedrop_upload.py` still works as an alias for `ratatosk.py upload`.
+
+## Using it
+
+- **Upload** (`/`): choose File or Text, then set expiry, download limit, burn-after-download or a passphrase. With several files selected, "Share as one link" bundles them. Each file shows whether its metadata was removed.
+- **Download:** open the link. Without a full link, use `/download` with the file ID and key or passphrase.
+- **My Files** (`/files`): manage your links and shares.
+- **Profile** (`/account`): password, email, two-factor authentication, **encryption keys**, API keys, sharing-directory visibility, and account deletion (needs your password, or your username for SSO accounts; the last admin can't delete themselves).
+- **Request links** (`/requests`): create links, copy them, close them, and open what people sent you.
+- **About** (`/about`): how it works, the trust model, license and version.
 
 ## API overview
 
-All endpoints are under `/api`. Interactive docs (Swagger UI) are available at **`/docs`** when the server is running.
+Everything is under `/api`. Interactive docs are at `/docs`.
 
 | Endpoint | Purpose |
 |---|---|
-| `POST /api/auth/register`, `/login`, `GET /api/auth/me` | Account management. `/login` may return a session token, or an `mfa_required`/`mfa_setup_required` response if two-factor is enabled/enforced. |
-| `POST /api/auth/mfa/setup`, `/mfa/confirm`, `/mfa/verify`, `/mfa/enforce-setup`, `/mfa/enforce-confirm`, `/mfa/disable` | Two-factor authentication setup and login-time verification. |
-| `POST /api/auth/change-password`, `/logout-everywhere`, `DELETE /api/auth/me` | Self-service password change (invalidates other sessions, returns a fresh token), sign out every other session on demand, account deletion. |
-| `GET /api/config` | Public, non-sensitive subset of current policy (limits, TTL presets, password policy, etc.) for the frontend to render. |
-| `GET/POST /api/account/api-keys`, `DELETE /api/account/api-keys/{id}` | API key management, including scope (`full`/`upload`) at creation. |
-| `POST /api/uploads/init` → `PUT /api/uploads/{id}/chunk` → `POST /api/uploads/{id}/complete` | Chunked upload flow. |
-| `GET /api/files/{id}/meta`, `POST /api/files/{id}/verify-password`, `GET /api/files/{id}/blob` | Download flow (all three respect the anonymous-download policy). |
-| `GET /api/files/mine`, `DELETE /api/files/{id}` | Owner file management. |
-| `GET /api/users/list`, `POST /api/files/{id}/share`, `GET /api/files/shared-with-me`, `GET /api/files/{id}/shared-key`, `DELETE /api/files/{id}/share/{recipient_id}` | User-to-user sharing (logged in; 403 if disabled in settings). |
-| `GET /api/admin/settings`, `PATCH /api/admin/settings` | Runtime configuration (admin only). |
-| `GET /api/admin/audit`, `GET /api/admin/audit/export`, `POST /api/admin/audit/prune` | Audit log (admin only). |
-| `GET/POST /api/admin/users`, `PATCH/DELETE /api/admin/users/{id}`, `POST /api/admin/users/{id}/reset-password` | User management, including rename (admin only; 403 if disabled in settings). |
-| `GET /api/admin/stats`, `GET /api/admin/stats/timeseries` | Statistics for the Statistics page (admin only). |
-| `GET /api/branding/logo` | Public — streams the current custom logo, or 404 if none is set. |
-| `POST /api/admin/branding/logo`, `DELETE /api/admin/branding/logo` | Upload/remove the custom logo (admin only). |
-| `GET /api/admin/files`, `DELETE /api/admin/files/{id}` | Platform-wide file management (admin only; 403 if disabled in settings). |
-| `POST /api/admin/system/reset` | Full factory reset — wipes every user, file, and setting; requires the acting admin's current password (admin only). |
+| `POST /api/auth/register`, `/login`, `/logout`, `GET /api/auth/me` | Accounts. Login and register return a session, an MFA challenge, or a mandatory-MFA-setup step. |
+| `POST /api/auth/mfa/{setup,confirm,verify,enforce-setup,enforce-confirm,disable}` | Two-factor authentication (`disable` needs password plus a current code). |
+| `POST /api/auth/change-password`, `/logout-everywhere`, `PATCH /api/auth/email`, `/discoverable`, `DELETE /api/auth/me` | Self-service |
+| `GET /api/config`, `GET /api/health` | Public policy subset (includes `version`); health check |
+| `POST /api/uploads/init` → `PUT /api/uploads/{id}/chunk` (header `Upload-Offset`) → `POST /api/uploads/{id}/complete` | Upload. Also `GET /api/uploads/{id}` (resume offset) and `DELETE` (cancel). |
+| `GET /api/files/{id}/meta`, `POST /api/files/{id}/verify-token`, `GET /api/files/{id}/blob` (header `X-Download-Token`) | Download |
+| `GET /api/files/mine`, `PATCH /api/files/{id}`, `POST /api/files/{id}/unlock`, `DELETE /api/files/{id}` | Owner file management |
+| `GET /api/users/list`, `GET /api/users/lookup`, `POST /api/files/{id}/share`, `GET /api/files/shared-with-me`, `GET /api/files/{id}/shared-key`, `DELETE /api/files/{id}/share/{recipient}` | User-to-user sharing |
+| `/api/admin/settings`, `/audit`, `/users`, `/files`, `/stats`, `/branding/logo`, `/system/reset` | Administration (admin only) |
+| `GET/POST /api/account/api-keys`, `DELETE /api/account/api-keys/{id}` | API keys |
+| `GET/PUT /api/account/keys`, `GET /api/users/{id}/public-key` | End-to-end encryption keys (the private key is always passphrase-wrapped) |
+| `POST/GET /api/requests`, `POST /api/requests/{id}/close`, `DELETE /api/requests/{id}`, `GET /api/requests/{id}/files`, `GET /api/requests/{id}/public` | Request links (`/public` needs no account) |
+| `GET /api/auth/oidc/login`, `/callback` | Single sign-on |
+| `GET /api/integrity` | Hashes of every frontend file plus the release digest |
 
 ---
+
+## Development
+
+```bash
+pip install -r requirements-dev.txt
+python -m playwright install chromium        # for the browser tests
+npm install                                  # for eslint (dev only; nothing is shipped)
+
+pytest -q --ignore=tests/e2e                 # unit and API tests
+pytest -q tests/e2e                          # real-browser and live-server concurrency tests
+node --test "tests/js/*.test.mjs"           # crypto, metadata stripping, CLI <-> browser interop
+
+ruff check app cli tests migrations/env.py   # lint
+mypy app cli                                 # types
+bandit -c pyproject.toml -r app cli          # security lint
+pip-audit -r requirements.txt                # known-vulnerable dependencies
+npx eslint frontend/static/js tests/js       # JS lint incl. XSS sinks
+```
+
+CI runs all of the above ([.github/workflows/ci.yml](.github/workflows/ci.yml)). Tests use throwaway databases and storage, and never touch your real data.
+
+**Frontend changes:** after editing any JS or CSS, run `python -m app.integrity write` to refresh the Subresource Integrity hashes. A test fails if you forget. At release time, record `python -m app.integrity digest` in the changelog.
+
+**Schema changes** go through Alembic. Change a model, then run `alembic revision --autogenerate -m "what changed"`, review the file, and the app applies it on start. Databases created before Alembic are brought to the baseline and stamped automatically.
+
+**Dependencies:** edit `requirements.txt`, then regenerate the lock with `uv pip compile requirements.txt --generate-hashes -o requirements.lock`.
+
+## Versioning
+
+Ratatosk follows [Semantic Versioning](https://semver.org): **MAJOR** for incompatible changes (file format, API, configuration), **MINOR** for features, **PATCH** for fixes.
+
+- The version lives in [`app/version.py`](app/version.py), and the CLI carries the same number (a test keeps them equal).
+- It's shown on the About page, in every page footer, by `GET /api/health`, and by `ratatosk --version`.
+- Every release is recorded in [CHANGELOG.md](CHANGELOG.md). To release, add the entries under a new version heading, bump both version strings, and tag the commit `vX.Y.Z`.
+
+## Backups
+
+The database runs in SQLite WAL mode, so **don't copy the `.db` file while the server runs**: recent changes live in the `-wal` file, and a plain copy can be stale or inconsistent. Use SQLite's backup command instead, plus a copy of the storage directory:
+
+```bash
+sqlite3 ratatosk.db ".backup 'backup-$(date +%F).db'"     # or securedrop.db on upgraded installs
+rsync -a storage/ backup-storage/
+```
+
+## Upgrading to 2.1
+
+Everyone signs in once more after upgrading: sessions moved from browser storage into a secure cookie. Nothing else changes for existing users. Encryption keys, request links and SSO are opt-in.
+
+## Upgrading from SecureDrop 1.x
+
+Start 2.0 against your existing data. The database is migrated on first start, existing `SECUREDROP_*` settings keep working (rename them to `RATATOSK_*` when convenient), and every previously uploaded file still decrypts. Two things change for existing users:
+- **Old CLI versions can't upload with a passphrase any more.** The server refuses to receive passphrases. Use `cli/ratatosk.py`.
+- **The sharing directory is now opt-in.** Users who want to appear in the share picker can turn that on under Profile.
 
 ## Project structure
 
 ```
-SecureDrop/
-├── app/
-│   ├── api/              # FastAPI routers (auth, uploads, files, sharing, admin settings/audit/users/files/system, public config, account API keys)
-│   ├── core/              # Config, DB session, security/JWT, dynamic settings cache, privacy helpers, cleanup worker, TTL parsing, password policy, SQLite migration helper
-│   ├── models/             # SQLAlchemy models (User, FileObject, FileShare, ApiKey, SystemSettings, AuditLog)
-│   ├── schemas/             # Pydantic request/response schemas
-│   ├── services/             # Storage backend facade + audit-logging + email services
-│   │   └── storage_backends/    # StorageBackend interface, LocalDiskBackend, S3Backend
-│   ├── init_db.py             # Creates tables + seeds default settings/admin account
-│   └── main.py                 # App entrypoint, routing, middleware
-├── frontend/
-│   ├── *.html                    # Upload, share, download, login, register, account, my-files, admin pages
-│   └── static/
-│       ├── css/app.css              # Self-hosted UI kit (light/dark themes, tag-list widget, strength bar)
-│       └── js/                        # crypto.js, exif-strip.js, upload/download flows, admin UIs, vendor/qrcode.js
-├── storage/
-│   ├── encrypted/                       # Encrypted blobs when using the local backend (gitignored)
-│   └── tmp/                               # In-progress chunked uploads, always local regardless of backend (gitignored)
-├── tests/                                     # pytest suite - see [Running tests](#running-tests)
-├── cli/                                         # securedrop_upload.py - scripted/CI upload client
-├── Dockerfile
-├── docker-compose.yml
-├── requirements.txt
-├── requirements-dev.txt                     # pytest, httpx (for TestClient)
-├── requirements-s3.txt                    # boto3, only needed for the S3 storage backend
-└── .env.example
+app/
+  api/            FastAPI routers (auth, uploads, files, sharing, admin, config, API keys)
+  core/           config, database (UTC-aware types, SQLite WAL), security (JWT, TOTP), settings cache,
+                  rate limiting, cleanup worker, migrations runner, privacy helpers
+  models/         SQLAlchemy models, incl. ops.py (throttles, revocations, deletion queue, leases, chunks)
+  schemas/        Pydantic schemas (settings schemas generated from the model)
+  services/       lockout, users, files, session policy, storage (local/S3), audit, email
+  init_db.py      migrations plus first admin;  unlock.py  out-of-band unlock;  version.py
+cli/ratatosk.py   command-line client
+frontend/         HTML pages and static/js (crypto.js, exif-strip.js, upload/download flows, sw.js, admin UIs)
+migrations/       Alembic revisions
+deploy/tor/       Tor onion-service sidecar
+docs/             AUDIT.md (engineering audit and status), TOR.md
+tests/            pytest (API, S3, privacy, policy), tests/e2e (Playwright and concurrency), tests/js (node --test)
 ```
-
----
-
-## Security notes
-
-- This project implements strong client-side cryptography and reasonable operational hardening, but it has **not** been through a professional security audit. Review the code yourself before relying on it for sensitive data.
-- Always deploy behind HTTPS in production — besides the general risk of plaintext HTTP, some browsers restrict `window.crypto.subtle` and clipboard APIs to secure contexts.
-- Change `SECUREDROP_SECRET_KEY` before any non-local deployment; the default is an intentionally obvious placeholder.
-- The "secondary password" server-side check exists only to rate-limit guessing — it is not, and cannot be, a substitute for keeping the actual link/passphrase confidential.
-- Zero-knowledge covers *content and keys*; it does not make the server operator blind to traffic metadata an ISP/network observer could see (file sizes, request timing) beyond what the anonymity settings above mitigate.
-- Session tokens are versioned per-account: a password change or "Log out other sessions" invalidates every token issued before that moment, on its very next use — there's no waiting for expiry.
-- User-to-user sharing (as opposed to link sharing) is a deliberate, narrower exception to the zero-knowledge design: to let a recipient decrypt just by being logged in, the client-side key for that specific share is stored server-side, scoped to the file's owner and chosen recipients only. Direct link/passphrase sharing is unaffected and stays fully zero-knowledge.
-- An "Upload only" API key is rejected outside the upload endpoints at the same authentication choke point every other request passes through — a leaked upload-only key can't be used to list, download, or delete anything.
-
----
 
 ## License
 
-Released under the [MIT License](LICENSE).
+[MIT](LICENSE). Copyright © 2026 Johan Zetterström.

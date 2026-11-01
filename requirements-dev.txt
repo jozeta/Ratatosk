@@ -1,3 +1,14 @@
 -r requirements.txt
-pytest==8.3.4
+-r requirements-s3.txt
+pytest==8.4.2
 httpx==0.28.1
+# static analysis / security scanning (see .github/workflows/ci.yml)
+ruff
+mypy
+bandit
+pip-audit
+# S3 backend tests without a real bucket
+moto[s3]
+# browser end-to-end tests (then: python -m playwright install chromium)
+playwright
+pytest-playwright

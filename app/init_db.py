@@ -3,20 +3,15 @@ default admin account. Safe to re-run (idempotent)."""
 import secrets
 
 from app.core.config import settings as static_settings
-from app.core.database import Base, SessionLocal, engine
+from app.core.database import SessionLocal
 from app.core.dynamic_settings import get_or_create_settings
-from app.core.migrate import sync_table_columns
+from app.core.migrate import run_migrations
 from app.core.security import hash_password
-from app.models.file import FileObject
-from app.models.settings import SystemSettings
 from app.models.user import User
 
 
 def main():
-    Base.metadata.create_all(bind=engine)
-    sync_table_columns(engine, SystemSettings)
-    sync_table_columns(engine, FileObject)
-    sync_table_columns(engine, User)
+    run_migrations()
 
     db = SessionLocal()
     try:

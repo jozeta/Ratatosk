@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SecureDrop</title>
-<link rel="stylesheet" href="/static/css/app.css">
+<title>Ratatosk</title>
+<link rel="stylesheet" href="/static/css/app.css" integrity="sha384-YetmR1azM/OlNBUGGGv1MKgZtyC1WcP/ovrT7LEul6zowoFeQF0lXLeo9qdpRg2x">
 </head>
 <body>
 
@@ -14,9 +14,24 @@
 
   <div class="card">
     <h2 class="mt-0">Send a file, zero-knowledge</h2>
-    <p class="text-muted small">Encrypted entirely in your browser with AES-256-GCM before it ever leaves your device. The server only ever stores ciphertext.</p>
+    <p class="text-muted small">Encrypted entirely in your browser with AES-256-GCM before it ever leaves your device. The server only ever stores ciphertext. <a href="/about">How it works</a></p>
 
-    <div class="dropzone" id="dropzone">
+    <div id="resumeBanner" class="resume-banner" hidden></div>
+
+    <div class="mode-tabs" role="tablist" aria-label="What to send">
+      <button type="button" role="tab" data-mode="file" aria-selected="true" aria-controls="fileModePanel">File</button>
+      <button type="button" role="tab" data-mode="text" aria-selected="false" aria-controls="textModePanel">Text</button>
+    </div>
+
+    <div id="textModePanel" role="tabpanel" hidden>
+      <div class="form-group">
+        <label for="textInput">Message</label>
+        <textarea id="textInput" rows="7" placeholder="Paste a password, a note, a snippet... The recipient sees it in their browser - nothing to download."></textarea>
+      </div>
+    </div>
+
+    <div id="fileModePanel" role="tabpanel">
+    <div class="dropzone" id="dropzone" role="button" tabindex="0" aria-label="Choose files to upload">
       <div class="icon">📁</div>
       <div id="dropzoneText">Drag &amp; drop a file here, or click to browse</div>
       <div class="form-hint" id="maxSizeHint"></div>
@@ -26,6 +41,15 @@
     </div>
 
     <div id="fileQueue" class="mt-2" style="display:none"></div>
+
+    <div class="switch-row" id="bundleRow" style="display:none">
+      <div>
+        <div class="label">Share as one link<span class="info-icon" tabindex="0">i<span class="info-tooltip">Upload the files together behind a single link. The recipient opens one link and sees the list of files. Each file keeps its own random key, stored inside the encrypted list.</span></span></div>
+        <div class="desc">One link for all files, instead of one per file</div>
+      </div>
+      <label class="switch"><input type="checkbox" id="bundleFiles" checked><span class="slider"></span></label>
+    </div>
+    </div>
 
     <div class="grid grid-2 mt-2" id="ttlMaxDownloadsRow">
       <div class="form-group mb-0" id="ttlGroup">
@@ -61,18 +85,19 @@
     </div>
 
     <div id="progressWrap" class="mt-2" style="display:none">
-      <div class="progress"><div class="progress-bar" id="progressBar"></div></div>
+      <div class="progress"><div class="progress-bar" id="progressBar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-label="Upload progress"></div></div>
       <div class="small text-muted mt-1" id="progressLabel"></div>
     </div>
 
     <button class="btn btn-primary btn-block mt-2" id="uploadBtn" disabled>Encrypt &amp; Upload</button>
+    <button class="btn btn-outline btn-block mt-1" id="cancelBtn" type="button" hidden>Cancel upload</button>
   </div>
 </main>
 
 <div class="modal-backdrop" id="resultModal" hidden>
   <div class="modal" style="position:relative">
     <button class="modal-close-x" id="closeModalXBtn" title="Close" aria-label="Close">×</button>
-    <h3 class="mt-0">File uploaded</h3>
+    <h3 class="mt-0" id="resultTitle">File uploaded</h3>
     <p class="small text-muted">Anyone with this link (and passphrase, if set) can download and decrypt the file. The server cannot.</p>
 
     <div class="form-group">
@@ -98,6 +123,10 @@
     <div id="shareWithUsersSection" class="form-group" style="display:none">
       <label>Share with specific users<span class="info-icon" tabindex="0">i<span class="info-tooltip">Chosen accounts can decrypt this file just by logging in and visiting "Shared With Me" - no link or passphrase needed. Only works for files without a secondary passphrase.</span></span></label>
       <div class="user-picker" id="userPickerList"></div>
+      <div class="copy-field mt-1">
+        <input type="text" id="shareLookupInput" placeholder="Add someone by exact username" aria-label="Username to share with">
+        <button class="btn btn-outline" id="shareLookupBtn" type="button">Add</button>
+      </div>
       <button class="btn btn-outline btn-block mt-1" id="shareWithUsersBtn">Share</button>
       <div class="small text-muted mt-1" id="shareStatus"></div>
     </div>
@@ -123,14 +152,17 @@
 
 <footer class="app-footer" id="sd-footer"></footer>
 
-<script src="/static/js/theme.js"></script>
-<script src="/static/js/api.js"></script>
-<script src="/static/js/layout.js"></script>
-<script src="/static/js/toast.js"></script>
-<script src="/static/js/tooltip.js"></script>
-<script src="/static/js/crypto.js"></script>
-<script src="/static/js/exif-strip.js"></script>
-<script src="/static/js/vendor/qrcode.js"></script>
-<script src="/static/js/upload.js"></script>
+<script src="/static/js/theme.js" integrity="sha384-nHvWqFZ1BnneONoX6ZPhrl4VABFF8xIUWBwbhH3cUOnUSiE3adAxGv7hWS2t52O0"></script>
+<script src="/static/js/api.js" integrity="sha384-Y9cUFpIQmvkj2Dod0H9JG7V5GxpTGFAbTZhJLHozPr7aj5lVBXYv/vTl5aw/Wecd"></script>
+<script src="/static/js/util.js" integrity="sha384-8vf+Et4kAE1vlYnPu6eqdHc87s/gPaMgEbQs6hTCrAoVrU/2+gwZsWn0PkQ+uzz9"></script>
+<script src="/static/js/layout.js" integrity="sha384-YuqiK8ghvkemv2WE11QDtksZ8NuCwmK48ous0Fqt2+DdNIy6TJ2nu4YXLJGzij9B"></script>
+<script src="/static/js/toast.js" integrity="sha384-rJf0ghcDDyTSRWuJBh0oIWI5018WpskKKJWc467cQKtx4Ol3ldIt8aL4iZXE6DTG"></script>
+<script src="/static/js/tooltip.js" integrity="sha384-FBe2v4AX/7O72bIXLhFw5BYfgyVliL0EXpnX2tj3gLPqle3aykCG8TnNAgPnRzk3"></script>
+<script src="/static/js/crypto.js" integrity="sha384-//es3w1L/OCgQD0yyyzhMDKSl1a+kJqCTI1gc6f4m/5JgEIC+N592VzrO/5dAexX"></script>
+<script src="/static/js/keys.js" integrity="sha384-hvqn0fX7XUjob6mckjKn4WIWJZA+ymuerWAs9ICCfq2uDbjd/iy9QLOgQIexM19S"></script>
+<script src="/static/js/exif-strip.js" integrity="sha384-MF5xMOtLF+VF8UsOGugPmkOcwQDj7L2lXJ6DQO5EV9OiHglA1uTudd0MLW1nPeou"></script>
+<script src="/static/js/vendor/qrcode.js" integrity="sha384-cu2WiLRIjCEHtYQ8Yg1zDr2owpoIebhQYj59x8UtsTFA4gIbsetESlpmcSZItOJx"></script>
+<script src="/static/js/upload-engine.js" integrity="sha384-emUHBncelUds5BpgFggrNqsQ7bcwdXhfjyc4vx/EPArykr6ByQjRH2bsNEpCbXKo"></script>
+<script src="/static/js/upload.js" integrity="sha384-Bm1jGjiCWRcoravjNQHqCqQu1hGQpu+eqK84eKIaICHVOFv6AAV8sg7bEjPzvxuD"></script>
 </body>
 </html>

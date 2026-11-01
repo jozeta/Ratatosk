@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SecureDrop - Profile</title>
-<link rel="stylesheet" href="/static/css/app.css">
+<title>Ratatosk - Profile</title>
+<link rel="stylesheet" href="/static/css/app.css" integrity="sha384-YetmR1azM/OlNBUGGGv1MKgZtyC1WcP/ovrT7LEul6zowoFeQF0lXLeo9qdpRg2x">
 </head>
 <body>
 
@@ -44,6 +44,10 @@
       <div class="form-group">
         <label for="mfaDisablePassword">Confirm your password to disable 2FA</label>
         <input type="password" id="mfaDisablePassword" autocomplete="current-password" required>
+      </div>
+      <div class="form-group">
+        <label for="mfaDisableCode">Current code from your authenticator app (or a backup code)</label>
+        <input type="text" id="mfaDisableCode" inputmode="numeric" autocomplete="one-time-code" required>
       </div>
       <button type="submit" class="btn btn-danger">Disable 2FA</button>
       <button type="button" class="btn btn-outline" id="mfaCancelDisableBtn">Cancel</button>
@@ -130,22 +134,59 @@
     <p class="text-muted small mt-2" id="apiKeysEmptyState" style="display:none">No API keys yet.</p>
   </div>
 
+  <div class="card" id="keysCard">
+    <h3 class="mt-0">End-to-end encryption keys</h3>
+    <p class="small text-muted">
+      Your own keypair lets other people share files with you, and send you files through request links, so that
+      only you can open them - not even this server. The private key is protected by an <strong>encryption
+      passphrase</strong> that never leaves your browser. Use a different passphrase from your login password: the
+      server sees your login password when you sign in. If you forget the encryption passphrase, files sent to your
+      current key can't be recovered.
+    </p>
+    <div id="keysStatus" class="small mb-2" aria-live="polite">Checking…</div>
+    <div class="row-actions">
+      <button type="button" class="btn btn-primary" id="keysSetupBtn" hidden>Set up encryption keys</button>
+      <button type="button" class="btn btn-outline" id="keysRewrapBtn" hidden>Change encryption passphrase</button>
+      <button type="button" class="btn btn-danger" id="keysReplaceBtn" hidden>Replace keys…</button>
+    </div>
+  </div>
+
+  <div class="card" id="discoverableCard" hidden>
+    <h3 class="mt-0">Sharing directory</h3>
+    <div class="switch-row mb-0">
+      <div>
+        <div class="label">Let others find me when sharing</div>
+        <div class="desc">If on, your username appears in the list people pick from when sharing a file. If off, someone must type your exact username.</div>
+      </div>
+      <label class="switch"><input type="checkbox" id="discoverableToggle"><span class="slider"></span></label>
+    </div>
+  </div>
+
   <div class="card">
     <h3 class="mt-0">Delete account</h3>
     <p class="small text-muted">This permanently deletes your account. Files you've already shared will keep working (they become unowned) but you'll lose access to "My Files".</p>
+    <div class="form-group">
+      <label for="deleteAccountPassword" id="deleteConfirmLabel">Confirm your password</label>
+      <input type="password" id="deleteAccountPassword" autocomplete="current-password">
+    </div>
     <button class="btn btn-danger" id="deleteAccountBtn">Delete my account</button>
   </div>
 </main>
 
 <footer class="app-footer" id="sd-footer"></footer>
 
-<script src="/static/js/theme.js"></script>
-<script src="/static/js/api.js"></script>
-<script src="/static/js/layout.js"></script>
-<script src="/static/js/toast.js"></script>
-<script src="/static/js/tooltip.js"></script>
-<script src="/static/js/password-strength.js"></script>
-<script src="/static/js/vendor/qrcode.js"></script>
-<script src="/static/js/account.js"></script>
+<script src="/static/js/theme.js" integrity="sha384-nHvWqFZ1BnneONoX6ZPhrl4VABFF8xIUWBwbhH3cUOnUSiE3adAxGv7hWS2t52O0"></script>
+<script src="/static/js/api.js" integrity="sha384-Y9cUFpIQmvkj2Dod0H9JG7V5GxpTGFAbTZhJLHozPr7aj5lVBXYv/vTl5aw/Wecd"></script>
+<script src="/static/js/util.js" integrity="sha384-8vf+Et4kAE1vlYnPu6eqdHc87s/gPaMgEbQs6hTCrAoVrU/2+gwZsWn0PkQ+uzz9"></script>
+<script src="/static/js/layout.js" integrity="sha384-YuqiK8ghvkemv2WE11QDtksZ8NuCwmK48ous0Fqt2+DdNIy6TJ2nu4YXLJGzij9B"></script>
+<script src="/static/js/toast.js" integrity="sha384-rJf0ghcDDyTSRWuJBh0oIWI5018WpskKKJWc467cQKtx4Ol3ldIt8aL4iZXE6DTG"></script>
+<script src="/static/js/tooltip.js" integrity="sha384-FBe2v4AX/7O72bIXLhFw5BYfgyVliL0EXpnX2tj3gLPqle3aykCG8TnNAgPnRzk3"></script>
+<script src="/static/js/password-strength.js" integrity="sha384-IeP95lC7n09ihVrLVJYgmB4sIYrGSfMMPb5xIsvhZhnmFo4cZZxWkMY5wi/XyBQ+"></script>
+<script src="/static/js/vendor/qrcode.js" integrity="sha384-cu2WiLRIjCEHtYQ8Yg1zDr2owpoIebhQYj59x8UtsTFA4gIbsetESlpmcSZItOJx"></script>
+<script src="/static/js/crypto.js" integrity="sha384-//es3w1L/OCgQD0yyyzhMDKSl1a+kJqCTI1gc6f4m/5JgEIC+N592VzrO/5dAexX"></script>
+<script src="/static/js/keys.js" integrity="sha384-hvqn0fX7XUjob6mckjKn4WIWJZA+ymuerWAs9ICCfq2uDbjd/iy9QLOgQIexM19S"></script>
+<script src="/static/js/keys-ui.js" integrity="sha384-lE8YdGFpEsO2lS+bnfi1lfaZiYActatGlO9ehUvgodTMz3KwMc4YlHnaBz+nbS3J"></script>
+<script src="/static/js/account-keys.js" integrity="sha384-jg2JBH+rLqRr+tQ+Wh/sbVOmzjAKZOs0ynM4qEs5qTzDTMAXa6rzm2ghCdIHcD2O"></script>
+<script src="/static/js/account.js" integrity="sha384-vOPEo6NKkE1LpnoGqCioURgIHygZV/5g3ZSaVt4LygQEBwvMOqle7nXGjhsKEIwx"></script>
 </body>
 </html>

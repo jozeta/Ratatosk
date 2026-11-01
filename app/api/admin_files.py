@@ -2,6 +2,7 @@ import collections
 import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -9,11 +10,11 @@ from app.core.dynamic_settings import get_settings
 from app.core.security import require_admin
 from app.models.audit_log import AuditLog
 from app.models.file import FileObject
-from app.models.file_share import FileShare
 from app.models.user import User
 from app.schemas.common import BatchIds
 from app.services import storage_service
 from app.services.audit_service import log_event
+from app.services.files import delete_files
 
 router = APIRouter(prefix="/api/admin", tags=["admin"])
 
@@ -31,7 +32,8 @@ def list_all_files(
     admin: User = Depends(require_admin),
 ):
     _require_enabled()
-    now = datetime.datetime.now(datetime.timezone.utc)
+    page, page_size = max(1, page), min(max(1, page_size), 500)
+    now = datetime.datetime.now(datetime.UTC)
     q = db.query(FileObject).filter(FileObject.is_deleted == False)  # noqa: E712
     total = q.count()
     files = q.order_by(FileObject.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
@@ -45,7 +47,7 @@ def list_all_files(
     items = [
         {
             "file_id": f.id,
-            "owner": owners.get(f.owner_id, "anonymous"),
+            "owner": owners.get(f.owner_id or "", "anonymous"),
             "size_bytes": f.size_bytes,
             "created_at": f.created_at.isoformat(),
             "expires_at": f.expires_at.isoformat(),
@@ -53,7 +55,7 @@ def list_all_files(
             "max_downloads": f.max_downloads,
             "download_count": f.download_count,
             "password_protected": bool(f.password_hash),
-            "expired": f.expires_at.replace(tzinfo=datetime.timezone.utc) <= now,
+            "expired": f.expires_at <= now,
         }
         for f in files
     ]
@@ -67,10 +69,7 @@ def admin_delete_file(file_id: str, request: Request, db: Session = Depends(get_
     if f is None or f.is_deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
 
-    f.is_deleted = True
-    db.query(FileShare).filter(FileShare.file_id == f.id).delete()
-    db.commit()
-    storage_service.delete_blob(f.storage_filename)
+    delete_files(db, [f])
     log_event(db, "FILE_DELETED", request=request, file_id=f.id, user_id=admin.id, detail="deleted by admin")
     return {"ok": True}
 
@@ -82,13 +81,7 @@ def admin_batch_delete_files(payload: BatchIds, request: Request, db: Session = 
     deleted_ids = [f.id for f in files]
 
     if deleted_ids:
-        db.query(FileShare).filter(FileShare.file_id.in_(deleted_ids)).delete(synchronize_session=False)
-        db.query(FileObject).filter(FileObject.id.in_(deleted_ids)).update(
-            {"is_deleted": True}, synchronize_session=False
-        )
-        db.commit()
-        for f in files:
-            storage_service.delete_blob(f.storage_filename)
+        delete_files(db, files)
         log_event(
             db,
             "FILE_DELETED",
@@ -104,15 +97,12 @@ def admin_batch_delete_files(payload: BatchIds, request: Request, db: Session = 
 @router.get("/stats")
 def get_stats(db: Session = Depends(get_db), admin: User = Depends(require_admin)):
     cfg = get_settings()
-    now = datetime.datetime.now(datetime.timezone.utc)
+    now = datetime.datetime.now(datetime.UTC)
 
-    active_files_q = db.query(FileObject).filter(FileObject.is_deleted == False)  # noqa: E712
-    active_files = active_files_q.all()
-    active_count = len(active_files)
-    active_bytes = sum(f.size_bytes for f in active_files)
-    expired_active_count = sum(
-        1 for f in active_files if f.expires_at.replace(tzinfo=datetime.timezone.utc) <= now
-    )
+    # SQL aggregates instead of loading every active row into Python (PERF-003).
+    not_deleted = FileObject.is_deleted == False  # noqa: E712
+    active_count, active_bytes = db.query(func.count(FileObject.id), func.coalesce(func.sum(FileObject.size_bytes), 0)).filter(not_deleted).one()
+    expired_active_count = db.query(func.count(FileObject.id)).filter(not_deleted, FileObject.expires_at <= now).scalar()
 
     total_uploads = db.query(AuditLog).filter(AuditLog.event_type.in_(["UPLOAD", "ANON_UPLOAD"])).count()
     total_downloads = db.query(AuditLog).filter(AuditLog.event_type == "DOWNLOAD").count()
@@ -121,12 +111,12 @@ def get_stats(db: Session = Depends(get_db), admin: User = Depends(require_admin
     total_deleted_events = db.query(AuditLog).filter(AuditLog.event_type == "FILE_DELETED").count()
     total_users = db.query(User).count()
 
-    storage_used_bytes = storage_service.get_storage_usage_bytes()
+    storage_used_bytes = storage_service.used_bytes(db)
     storage_cap_bytes = cfg["total_storage_cap_gb"] * 1024 * 1024 * 1024
 
     ext_counts: collections.Counter = collections.Counter()
-    for f in active_files:
-        ext_counts[(f.extension or "(none)").lower()] += 1
+    for ext, count in db.query(FileObject.extension, func.count(FileObject.id)).filter(not_deleted).group_by(FileObject.extension):
+        ext_counts[(ext or "(none)").lower()] += count
     extension_breakdown = [{"extension": ext, "count": count} for ext, count in ext_counts.most_common(8)]
     other_count = sum(ext_counts.values()) - sum(e["count"] for e in extension_breakdown)
     if other_count > 0:
@@ -195,7 +185,7 @@ def get_stats_timeseries(range: str = "30d", db: Session = Depends(get_db), admi
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid range")
     days, granularity = _RANGE_CONFIG[range]
 
-    now = datetime.datetime.now(datetime.timezone.utc)
+    now = datetime.datetime.now(datetime.UTC)
     cutoff = now - datetime.timedelta(days=days)
 
     rows = (
@@ -206,7 +196,6 @@ def get_stats_timeseries(range: str = "30d", db: Session = Depends(get_db), admi
 
     counts: dict[str, dict[str, int]] = collections.defaultdict(lambda: {"uploads": 0, "downloads": 0})
     for event_type, ts in rows:
-        ts = ts.replace(tzinfo=datetime.timezone.utc) if ts.tzinfo is None else ts
         key = _bucket_key(ts, granularity)
         if event_type in ("UPLOAD", "ANON_UPLOAD"):
             counts[key]["uploads"] += 1

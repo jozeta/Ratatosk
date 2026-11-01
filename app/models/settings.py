@@ -10,6 +10,9 @@ class SystemSettings(Base):
     __tablename__ = "system_settings"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    # Bumped on every change, so every process can cheaply notice that its
+    # cached copy is stale (BUG-002).
+    version: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
     # --- Access & Authentication ---
     allow_anonymous_upload: Mapped[bool] = mapped_column(Boolean, default=True)
@@ -45,7 +48,7 @@ class SystemSettings(Base):
     setup_completed: Mapped[bool] = mapped_column(Boolean, default=False)
 
     # --- Branding ---
-    brand_name: Mapped[str] = mapped_column(String(64), default="SecureDrop")
+    brand_name: Mapped[str] = mapped_column(String(64), default="Ratatosk")
     brand_logo_filename: Mapped[str | None] = mapped_column(String(64), nullable=True)
     footer_text: Mapped[str] = mapped_column(
         String(512),
@@ -76,7 +79,12 @@ class SystemSettings(Base):
     allow_custom_max_downloads: Mapped[bool] = mapped_column(Boolean, default=True)  # off = every upload uses default_max_downloads, fixed
 
     # --- Storage Engine ---
+    # Legacy: was admin-editable, now read-only. The storage location comes
+    # from RATATOSK_STORAGE_ROOT (SEC-010); a non-default value here is only
+    # honoured for installs that configured it before the change.
     storage_path: Mapped[str] = mapped_column(String(512), default="./storage/encrypted")
+    # In-progress uploads allowed at once across all uploaders (SEC-011).
+    max_active_upload_sessions: Mapped[int] = mapped_column(Integer, default=200)
     total_storage_cap_gb: Mapped[int] = mapped_column(Integer, default=50)
     cleanup_interval_minutes: Mapped[int] = mapped_column(Integer, default=5)
 
@@ -90,6 +98,23 @@ class SystemSettings(Base):
     disable_audit_log: Mapped[bool] = mapped_column(Boolean, default=False)
 
     max_login_attempts: Mapped[int] = mapped_column(Integer, default=5)
+
+    # --- Abuse rate limiting (SEC-011) --- per client network, in memory only
+    # (never persisted), applied to login/register/password-reset/anonymous
+    # upload/passphrase checks.
+    rate_limit_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    rate_limit_per_minute: Mapped[int] = mapped_column(Integer, default=30)
+
+    # --- Upload request links (FEAT-001) ---
+    enable_upload_requests: Mapped[bool] = mapped_column(Boolean, default=True)
+    # --- User-to-user sharing with recipients who have no encryption keys:
+    # falls back to a server-held key (the pre-2.1 behaviour). Off = such
+    # recipients can't be shared with until they set up keys (FEAT-002).
+    allow_server_held_share_keys: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    # --- Tor (FEAT-009) --- if set, every page advertises this .onion mirror
+    # via the Onion-Location header so Tor Browser offers to switch to it.
+    onion_address: Mapped[str] = mapped_column(String(255), default="")
 
     # --- Navigation ---
     hide_upload_link: Mapped[bool] = mapped_column(Boolean, default=False)

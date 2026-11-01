@@ -13,12 +13,25 @@
     return cell;
   }
 
-  function humanSize(bytes) {
-    if (bytes < 1024) return bytes + " B";
-    const units = ["KB", "MB", "GB"];
-    let val = bytes;
-    for (const u of units) { val /= 1024; if (val < 1024) return val.toFixed(1) + " " + u; }
-    return val.toFixed(1) + " TB";
+  const humanSize = (b) => window.SDUtil.humanSize(b);
+
+  function badge(text, cls) {
+    const b = document.createElement("span");
+    b.className = `badge ${cls}`;
+    b.textContent = text;
+    return b;
+  }
+
+  function actionButton(label, cls, onClick) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = `btn ${cls} btn-sm`;
+    btn.textContent = label;
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      try { await onClick(); } catch (e) { window.SDToast.danger(e.message); } finally { btn.disabled = false; }
+    });
+    return btn;
   }
 
   async function load() {
@@ -44,6 +57,9 @@
       idCode.textContent = f.file_id.slice(0, 8) + "…";
       idCode.title = f.file_id;
       idCell.appendChild(idCode);
+      if (f.is_bundle) idCell.appendChild(badge(`bundle · ${f.bundle_file_count} files`, "badge-muted"));
+      if (f.disabled) idCell.appendChild(badge("link off", "badge-warn"));
+      if (f.locked) idCell.appendChild(badge("locked", "badge-danger"));
       row.appendChild(idCell);
 
       row.appendChild(td(humanSize(f.size_bytes)));
@@ -96,20 +112,33 @@
       }
       row.appendChild(sharedCell);
 
+      // Link management (FEAT-007): switch the link off/on, end it now, or
+      // lift a wrong-passphrase lockout - limits can only be tightened.
       const actionCell = document.createElement("td");
-      const delBtn = document.createElement("button");
-      delBtn.className = "btn btn-danger btn-sm";
-      delBtn.textContent = "Delete";
-      delBtn.addEventListener("click", async () => {
-        if (!confirm("Delete this file permanently?")) return;
-        try {
-          await window.SDApi.del(`/api/files/${f.file_id}`);
+      actionCell.className = "row-actions";
+      if (!f.expired) {
+        actionCell.appendChild(actionButton(f.disabled ? "Turn link on" : "Turn link off", "btn-outline", async () => {
+          await window.SDApi.patch(`/api/files/${f.file_id}`, { disabled: !f.disabled });
           load();
-        } catch (e) {
-          window.SDToast.danger(e.message);
-        }
-      });
-      actionCell.appendChild(delBtn);
+        }));
+        actionCell.appendChild(actionButton("Expire now", "btn-outline", async () => {
+          if (!confirm("End this link now? Nobody will be able to download the file afterwards.")) return;
+          await window.SDApi.patch(`/api/files/${f.file_id}`, { expires_at: new Date().toISOString() });
+          load();
+        }));
+      }
+      if (f.locked) {
+        actionCell.appendChild(actionButton("Unlock", "btn-outline", async () => {
+          await window.SDApi.post(`/api/files/${f.file_id}/unlock`, {});
+          window.SDToast.show("Passphrase lockout lifted.", "success");
+          load();
+        }));
+      }
+      actionCell.appendChild(actionButton("Delete", "btn-danger", async () => {
+        if (!confirm(f.is_bundle ? "Delete this bundle and all its files permanently?" : "Delete this file permanently?")) return;
+        await window.SDApi.del(`/api/files/${f.file_id}`);
+        load();
+      }));
       row.appendChild(actionCell);
 
       tbody.appendChild(row);

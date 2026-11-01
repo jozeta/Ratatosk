@@ -56,7 +56,7 @@ def test_custom_ttl_ignored_when_admin_locks_it(client, admin_headers):
     import datetime
 
     expires_at = datetime.datetime.fromisoformat(complete.json()["expires_at"])
-    now = datetime.datetime.now(datetime.timezone.utc)
+    now = datetime.datetime.now(datetime.UTC)
     assert expires_at - now < datetime.timedelta(hours=1)  # consistent with ~10m, not 30d
 
 
@@ -90,22 +90,43 @@ def test_force_burn_after_download_applies_even_if_client_says_no(client, admin_
     assert meta.json()["burn_after_download"] is True
 
 
+def token_fields(token: str, passphrase: bool = True) -> dict:
+    """What a client sends at /complete for a token-protected upload."""
+    import hashlib
+
+    fields = {"download_token_hash": hashlib.sha256(token.encode()).hexdigest()}
+    if passphrase:
+        fields.update(passphrase_protected=True, kdf_salt="c2FsdHNhbHRzYWx0c2FsdA", kdf_iterations=600000)
+    return fields
+
+
 def test_secondary_password_lockout(client, admin_headers):
-    complete = _upload(client, b"secret content", headers=admin_headers, password="correct-secret")
+    """Exactly max_login_attempts wrong guesses are checked, then the file is
+    locked - even for the right passphrase - until the lockout expires."""
+    complete = _upload(client, b"secret content", headers=admin_headers, **token_fields("right-token"))
+    assert complete.status_code == 200, complete.text
     file_id = complete.json()["file_id"]
     max_attempts = client.get("/api/admin/settings", headers=admin_headers).json()["max_login_attempts"]
 
-    for _ in range(max_attempts):
-        resp = client.post(f"/api/files/{file_id}/verify-password", json={"password": "wrong-guess"})
-        assert resp.status_code in (401, 423)
+    codes = [client.post(f"/api/files/{file_id}/verify-token", json={"token": "wrong"}).status_code for _ in range(max_attempts)]
+    assert codes == [401] * max_attempts
 
-    # Locked out now, even with the correct password.
-    resp = client.post(f"/api/files/{file_id}/verify-password", json={"password": "correct-secret"})
+    resp = client.post(f"/api/files/{file_id}/verify-token", json={"token": "right-token"})
     assert resp.status_code == 423
+    # The lock is temporary and the owner can lift it (SEC-006).
+    assert client.post(f"/api/files/{file_id}/unlock", headers=admin_headers).status_code == 200
+    assert client.post(f"/api/files/{file_id}/verify-token", json={"token": "right-token"}).status_code == 200
+
+
+def test_plaintext_passphrase_is_refused(client):
+    """SEC-001: the server must never receive a passphrase."""
+    resp = _upload(client, b"x", password="hunter2")
+    assert resp.status_code == 400
+    assert "passphrase" in resp.json()["detail"]
 
 
 def test_owner_can_delete_others_cannot(client):
-    owner_reg = client.post("/api/auth/register", json={"username": "owner1", "password": "correcthorse123"})
+    client.post("/api/auth/register", json={"username": "owner1", "password": "correcthorse123"})
     owner_headers = {"Authorization": f"Bearer {client.post('/api/auth/login', json={'username': 'owner1', 'password': 'correcthorse123'}).json()['access_token']}"}
     client.post("/api/auth/register", json={"username": "stranger1", "password": "correcthorse123"})
     stranger_headers = {"Authorization": f"Bearer {client.post('/api/auth/login', json={'username': 'stranger1', 'password': 'correcthorse123'}).json()['access_token']}"}

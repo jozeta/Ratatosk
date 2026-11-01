@@ -15,6 +15,11 @@ htmlcov/
 # Database
 *.db
 *.db-journal
+# SQLite WAL-mode companions hold recent database pages - never commit them
+*.db-wal
+*.db-shm
+*.sqlite-wal
+*.sqlite-shm
 *.sqlite
 *.sqlite3
 
@@ -38,3 +43,9 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+
+# Dev-only JS tooling
+node_modules/
+
+# Local assistant session notes
+.remember/

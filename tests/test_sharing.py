@@ -1,10 +1,13 @@
 from tests.test_upload_download import _upload
 
 
-def _register_and_login(client, username):
+def _register_and_login(client, username, discoverable=True):
     client.post("/api/auth/register", json={"username": username, "password": "correcthorse123"})
     token = client.post("/api/auth/login", json={"username": username, "password": "correcthorse123"}).json()["access_token"]
-    return {"Authorization": f"Bearer {token}"}
+    headers = {"Authorization": f"Bearer {token}"}
+    if discoverable:
+        client.patch("/api/auth/discoverable", json={"discoverable": True}, headers=headers)
+    return headers
 
 
 def test_owner_can_share_recipient_can_read_key_stranger_cannot(client):
@@ -53,7 +56,7 @@ def test_only_owner_can_share(client):
 
 def test_only_owner_or_admin_can_revoke_share(client, admin_headers):
     owner = _register_and_login(client, "owner4")
-    recipient = _register_and_login(client, "recipient4")
+    _register_and_login(client, "recipient4")
     stranger = _register_and_login(client, "stranger4")
 
     complete = _upload(client, b"revoke test", headers=owner)
@@ -72,3 +75,15 @@ def test_sharing_disabled_blocks_endpoints(client, admin_headers):
     client.patch("/api/admin/settings", json={"enable_user_sharing": False}, headers=admin_headers)
     resp = client.get("/api/files/shared-with-me", headers=admin_headers)
     assert resp.status_code == 403
+
+
+def test_directory_is_opt_in_but_exact_lookup_works(client):
+    """SEC-020: undiscoverable users aren't listed, but can still be found by
+    exact username."""
+    alice = _register_and_login(client, "alice5")
+    _register_and_login(client, "hidden5", discoverable=False)
+    listed = [u["username"] for u in client.get("/api/users/list", headers=alice).json()]
+    assert "hidden5" not in listed
+    found = client.get("/api/users/lookup", params={"username": "hidden5"}, headers=alice)
+    assert found.status_code == 200 and found.json()["username"] == "hidden5"
+    assert client.get("/api/users/lookup", params={"username": "nobody"}, headers=alice).status_code == 404

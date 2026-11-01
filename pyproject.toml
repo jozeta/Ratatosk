@@ -1,0 +1,40 @@
+[project]
+name = "ratatosk"
+dynamic = ["version"]
+description = "Self-hosted, zero-knowledge encrypted file and message sharing"
+license = { text = "MIT" }
+requires-python = ">=3.11"
+
+[tool.ruff]
+line-length = 150
+target-version = "py311"
+extend-exclude = ["migrations/versions"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "I", "UP", "S"]
+ignore = [
+  "S101",   # assert is fine in tests
+  "E501",   # long descriptive lines/comments are deliberate here
+  "UP045",  # keep Optional[...] in generated schema code
+  "B008",   # FastAPI's Depends() in defaults is the framework's idiom
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S", "B"]
+"cli/**" = ["S310"]  # urllib with user-supplied server URL is the CLI's purpose
+"app/services/oidc.py" = ["S310"]  # every URL passes _require_https() first (https, or localhost for development)
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+check_untyped_defs = true
+warn_unused_ignores = true
+exclude = ["migrations/versions"]
+
+[tool.bandit]
+exclude_dirs = ["tests", ".venv", "migrations"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]  # so bare `pytest` (as in CI) can import the app package
+markers = ["e2e: browser/live-server tests (need: python -m playwright install chromium)"]

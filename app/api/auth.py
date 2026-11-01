@@ -1,20 +1,22 @@
 import datetime
 import json
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response, status
+from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from app.core.database import get_db
+from app.core.database import get_db, utcnow
 from app.core.dynamic_settings import get_settings
 from app.core.password_policy import validate_password
+from app.core.ratelimit import check_rate
 from app.core.security import (
     _DUMMY_PASSWORD_HASH,
-    create_access_token,
-    create_mfa_setup_token,
-    create_mfa_token,
+    bearer_scheme,
+    clear_session_cookie,
     decode_mfa_setup_token,
     decode_mfa_token,
+    decode_token,
     generate_backup_codes,
     generate_reset_token,
     generate_totp_secret,
@@ -22,15 +24,17 @@ from app.core.security import (
     hash_password,
     hash_reset_token,
     require_user,
+    revoke_token,
+    session_token_from,
     totp_provisioning_uri,
     verify_password,
     verify_totp_code,
 )
-from app.models.file import FileObject
 from app.models.password_reset_token import PasswordResetToken
 from app.models.user import User
 from app.schemas.auth import (
     ChangePasswordRequest,
+    DeleteAccountRequest,
     ForgotPasswordRequest,
     LoginRequest,
     MfaConfirmRequest,
@@ -43,13 +47,18 @@ from app.schemas.auth import (
     MfaSetupRequired,
     MfaSetupResponse,
     MfaVerifyRequest,
+    RegisteredLoginRequired,
     RegisterRequest,
     ResetPasswordRequest,
     TokenResponse,
+    UpdateDiscoverableRequest,
     UpdateEmailRequest,
 )
+from app.services import lockout
 from app.services.audit_service import log_event
 from app.services.email_service import send_password_reset_email
+from app.services.session_policy import issue_session_or_challenge, mfa_required_for, session_for
+from app.services.users import delete_users
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -57,36 +66,46 @@ RESET_TOKEN_RESEND_COOLDOWN_SECONDS = 60
 GENERIC_RESET_MESSAGE = "If an account matches, a password reset email has been sent."
 
 
-def _register_login_failure(db: Session, user: User, cfg: dict, request: Request, event: str) -> None:
-    """Shared brute-force bookkeeping for both wrong passwords and wrong MFA
-    codes - both are guesses against the same account, so they share one
-    lockout counter."""
-    if not cfg["enable_login_rate_limit"]:
-        log_event(db, event, request=request, user_id=user.id)
-        return
-    now = datetime.datetime.now(datetime.timezone.utc)
-    user.failed_login_attempts += 1
-    locked_now = user.failed_login_attempts >= cfg["max_login_attempts"]
-    if locked_now:
-        user.login_locked_until = now + datetime.timedelta(minutes=cfg["login_lockout_minutes"])
-    db.commit()
-    if locked_now:
-        log_event(db, "BRUTE_FORCE_BLOCK", request=request, user_id=user.id, detail="lockout triggered")
-        raise HTTPException(
-            status_code=status.HTTP_423_LOCKED,
-            detail=f"Too many failed attempts. Try again in {cfg['login_lockout_minutes']} minute(s).",
-        )
-    log_event(db, event, request=request, user_id=user.id)
-
-
 def _normalize_email(email: str | None) -> str | None:
     email = (email or "").strip().lower()
     return email or None
 
 
-@router.post("/register", response_model=TokenResponse)
-def register(payload: RegisterRequest, request: Request, db: Session = Depends(get_db)):
+def _check_password_or_fail(db: Session, user: User, password: str, request: Request, cfg: dict) -> None:
+    """Verify a password with an atomically reserved attempt (SEC-005), so
+    neither logins nor in-session checks can be brute forced in parallel."""
+    if not user.password_login:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This account signs in with SSO and has no password here")
+    lockout.reserve_login_attempt(db, user.id, request, cfg)
+    ok = verify_password(password, user.password_hash)
+    triggered = lockout.record_login_attempt(db, user.id, request, ok, cfg)
+    if not ok:
+        if triggered:
+            log_event(db, "BRUTE_FORCE_BLOCK", request=request, user_id=user.id, detail="lockout triggered")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Current password is incorrect")
+
+
+def _check_second_factor(db: Session, user: User, code: str) -> str | None:
+    """Accept a fresh TOTP code (single use, SEC-014) or an unused backup
+    code. Returns "totp", "backup", or None. The caller commits."""
+    step = verify_totp_code(user.mfa_secret or "", code, user.mfa_last_step)
+    if step is not None:
+        user.mfa_last_step = step
+        return "totp"
+    if user.mfa_backup_codes:
+        codes = json.loads(user.mfa_backup_codes)
+        code_hash = hash_backup_code(code)
+        if code_hash in codes:
+            codes.remove(code_hash)
+            user.mfa_backup_codes = json.dumps(codes)
+            return "backup"
+    return None
+
+
+@router.post("/register", response_model=TokenResponse | MfaSetupRequired | RegisteredLoginRequired)
+def register(payload: RegisterRequest, request: Request, response: Response, db: Session = Depends(get_db)):
     cfg = get_settings()
+    check_rate(request, "register", cfg, per_minute=max(1, cfg["rate_limit_per_minute"] // 3))
     if not cfg["allow_user_registration"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Registration is disabled")
 
@@ -94,8 +113,7 @@ def register(payload: RegisterRequest, request: Request, db: Session = Depends(g
     if errors:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=" ".join(errors))
 
-    existing = db.query(User).filter(User.username == payload.username).first()
-    if existing:
+    if db.query(User).filter(User.username == payload.username).first():
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Username already taken")
 
     email = _normalize_email(payload.email)
@@ -106,119 +124,70 @@ def register(payload: RegisterRequest, request: Request, db: Session = Depends(g
     db.add(user)
     db.commit()
     db.refresh(user)
-
     log_event(db, "USER_REGISTERED", request=request, user_id=user.id)
-    token = create_access_token(user.id, user.is_admin, user.token_version)
-    return TokenResponse(access_token=token, is_admin=user.is_admin, username=user.username, id=user.id)
+
+    # Same policy as /login (SEC-007): no session while user login is
+    # disabled, and enforced MFA must be set up before the first session.
+    if not cfg["allow_user_login"]:
+        return RegisteredLoginRequired(detail="Account created. Sign-in is currently disabled for regular users.")
+    return issue_session_or_challenge(db, user, cfg, request, response=response)
 
 
 @router.post("/login", response_model=TokenResponse | MfaLoginRequired | MfaSetupRequired)
-def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)):
+def login(payload: LoginRequest, request: Request, response: Response, db: Session = Depends(get_db)):
     cfg = get_settings()
-    rate_limited = cfg["enable_login_rate_limit"]
-    now = datetime.datetime.now(datetime.timezone.utc)
+    check_rate(request, "login", cfg)
     user = db.query(User).filter(User.username == payload.username).first()
 
-    # Locked accounts are rejected before even checking the password, so a
-    # locked-out attacker can't keep guessing "for free" while locked.
-    if user is not None and rate_limited and user.login_locked_until:
-        locked_until = user.login_locked_until.replace(tzinfo=datetime.timezone.utc)
-        if locked_until > now:
-            remaining = max(1, int((locked_until - now).total_seconds() // 60) + 1)
-            log_event(db, "BRUTE_FORCE_BLOCK", request=request, user_id=user.id, detail="account login locked")
-            raise HTTPException(
-                status_code=status.HTTP_423_LOCKED,
-                detail=f"Too many failed attempts. Try again in {remaining} minute(s).",
-            )
-
-    # Always run a bcrypt verify, even for an unknown username, so the two
-    # cases take the same amount of time - otherwise the response latency
-    # itself would reveal which usernames have accounts.
-    password_ok = verify_password(payload.password, user.password_hash if user else _DUMMY_PASSWORD_HASH)
-    if user is None or not password_ok:
-        if user is not None and rate_limited:
-            user.failed_login_attempts += 1
-            locked_now = user.failed_login_attempts >= cfg["max_login_attempts"]
-            if locked_now:
-                user.login_locked_until = now + datetime.timedelta(minutes=cfg["login_lockout_minutes"])
-            db.commit()
-            if locked_now:
-                log_event(db, "BRUTE_FORCE_BLOCK", request=request, user_id=user.id, detail="lockout triggered")
-                raise HTTPException(
-                    status_code=status.HTTP_423_LOCKED,
-                    detail=f"Too many failed attempts. Try again in {cfg['login_lockout_minutes']} minute(s).",
-                )
-        log_event(db, "LOGIN_FAILED", request=request, detail=f"username={payload.username}")
+    if user is not None and not user.password_login:
+        user = None  # SSO-only accounts can't sign in with a password
+    if user is None:
+        # Same bcrypt cost as a real account, so response time doesn't reveal
+        # which usernames exist. The typed name is never logged (SEC-016):
+        # people regularly paste their password into the username field.
+        verify_password(payload.password, _DUMMY_PASSWORD_HASH)
+        log_event(db, "LOGIN_FAILED", request=request, detail="unknown account")
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
-    if not user.is_active:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account disabled")
+    lockout.reserve_login_attempt(db, user.id, request, cfg)
+    ok = verify_password(payload.password, user.password_hash)
+    triggered = lockout.record_login_attempt(db, user.id, request, ok, cfg)
+    if not ok:
+        log_event(db, "BRUTE_FORCE_BLOCK" if triggered else "LOGIN_FAILED", request=request, user_id=user.id,
+                  detail="lockout triggered" if triggered else "wrong password")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
-    # Admins can always log in; regular users can be locked out via policy.
-    if not user.is_admin and not cfg["allow_user_login"]:
-        log_event(db, "LOGIN_FAILED", request=request, user_id=user.id, detail="login disabled by policy")
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="User login is currently disabled")
-
-    if user.failed_login_attempts or user.login_locked_until:
-        user.failed_login_attempts = 0
-        user.login_locked_until = None
-        db.commit()
-
-    if user.mfa_enabled and cfg["enable_mfa"]:
-        return MfaLoginRequired(mfa_token=create_mfa_token(user.id))
-
-    mfa_enforced = cfg["enforce_mfa_admins"] if user.is_admin else cfg["enforce_mfa_users"]
-    if cfg["enable_mfa"] and mfa_enforced and not user.mfa_enabled:
-        return MfaSetupRequired(setup_token=create_mfa_setup_token(user.id))
-
-    log_event(db, "LOGIN_SUCCESS", request=request, user_id=user.id)
-    token = create_access_token(user.id, user.is_admin, user.token_version)
-    return TokenResponse(access_token=token, is_admin=user.is_admin, username=user.username, id=user.id)
+    return issue_session_or_challenge(db, user, cfg, request, response=response)
 
 
 @router.post("/mfa/verify", response_model=TokenResponse)
-def mfa_verify(payload: MfaVerifyRequest, request: Request, db: Session = Depends(get_db)):
+def mfa_verify(payload: MfaVerifyRequest, request: Request, response: Response, db: Session = Depends(get_db)):
     cfg = get_settings()
+    check_rate(request, "login", cfg)
     user_id = decode_mfa_token(payload.mfa_token)
     user = db.get(User, user_id)
     if user is None or not user.is_active or not user.mfa_enabled:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired login attempt")
 
-    now = datetime.datetime.now(datetime.timezone.utc)
-    if cfg["enable_login_rate_limit"] and user.login_locked_until:
-        locked_until = user.login_locked_until.replace(tzinfo=datetime.timezone.utc)
-        if locked_until > now:
-            remaining = max(1, int((locked_until - now).total_seconds() // 60) + 1)
-            raise HTTPException(
-                status_code=status.HTTP_423_LOCKED,
-                detail=f"Too many failed attempts. Try again in {remaining} minute(s).",
-            )
-
-    ok = verify_totp_code(user.mfa_secret, payload.code)
-    used_backup_code = False
-    if not ok and user.mfa_backup_codes:
-        codes = json.loads(user.mfa_backup_codes)
-        code_hash = hash_backup_code(payload.code)
-        if code_hash in codes:
-            ok = True
-            used_backup_code = True
-            codes.remove(code_hash)
-            user.mfa_backup_codes = json.dumps(codes)
-
+    # Wrong codes share the same reserved-attempt counter as wrong passwords.
+    lockout.reserve_login_attempt(db, user.id, request, cfg)
+    factor = _check_second_factor(db, user, payload.code)
+    ok = factor is not None
+    db.commit()
+    triggered = lockout.record_login_attempt(db, user.id, request, ok, cfg)
     if not ok:
-        _register_login_failure(db, user, cfg, request, "MFA_FAILED")
+        log_event(db, "BRUTE_FORCE_BLOCK" if triggered else "MFA_FAILED", request=request, user_id=user.id)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid code")
 
-    if user.failed_login_attempts or user.login_locked_until:
-        user.failed_login_attempts = 0
-        user.login_locked_until = None
-    db.commit()
-
-    if used_backup_code:
+    if factor == "backup":
         log_event(db, "MFA_BACKUP_CODE_USED", request=request, user_id=user.id)
-    log_event(db, "LOGIN_SUCCESS", request=request, user_id=user.id)
-    token = create_access_token(user.id, user.is_admin, user.token_version)
-    return TokenResponse(access_token=token, is_admin=user.is_admin, username=user.username, id=user.id)
+    return issue_session_or_challenge(db, user, cfg, request, skip_mfa=True, response=response)
+
+
+def _mfa_issuer(cfg: dict) -> str:
+    # The admin-configured brand, so authenticator apps show the right
+    # instance name (UI-007).
+    return (cfg.get("brand_name") or "Ratatosk").strip() or "Ratatosk"
 
 
 def _start_mfa_setup(user: User, cfg: dict, db: Session, request: Request) -> MfaSetupResponse:
@@ -229,9 +198,10 @@ def _start_mfa_setup(user: User, cfg: dict, db: Session, request: Request) -> Mf
 
     secret = generate_totp_secret()
     user.mfa_secret = secret
+    user.mfa_last_step = None
     db.commit()
     log_event(db, "MFA_SETUP_STARTED", request=request, user_id=user.id)
-    return MfaSetupResponse(secret=secret, otpauth_url=totp_provisioning_uri(secret, user.username, "SecureDrop"))
+    return MfaSetupResponse(secret=secret, otpauth_url=totp_provisioning_uri(secret, user.username, _mfa_issuer(cfg)))
 
 
 def _finish_mfa_setup(user: User, code: str, cfg: dict, db: Session, request: Request) -> list[str]:
@@ -241,12 +211,14 @@ def _finish_mfa_setup(user: User, code: str, cfg: dict, db: Session, request: Re
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="MFA is already enabled")
     if not user.mfa_secret:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Start MFA setup first")
-    if not verify_totp_code(user.mfa_secret, code):
+    step = verify_totp_code(user.mfa_secret, code)
+    if step is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid code")
 
     raw_codes = generate_backup_codes()
     user.mfa_backup_codes = json.dumps([hash_backup_code(c) for c in raw_codes])
     user.mfa_enabled = True
+    user.mfa_last_step = step
     db.commit()
     log_event(db, "MFA_ENABLED", request=request, user_id=user.id)
     return raw_codes
@@ -276,43 +248,80 @@ def mfa_enforce_setup(payload: MfaEnforceSetupRequest, request: Request, db: Ses
 
 
 @router.post("/mfa/enforce-confirm", response_model=MfaEnforceConfirmResponse)
-def mfa_enforce_confirm(payload: MfaEnforceConfirmRequest, request: Request, db: Session = Depends(get_db)):
+def mfa_enforce_confirm(payload: MfaEnforceConfirmRequest, request: Request, response: Response, db: Session = Depends(get_db)):
+    cfg = get_settings()
     user_id = decode_mfa_setup_token(payload.setup_token)
     user = db.get(User, user_id)
     if user is None or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired login attempt")
 
-    backup_codes = _finish_mfa_setup(user, payload.code, get_settings(), db, request)
-    log_event(db, "LOGIN_SUCCESS", request=request, user_id=user.id)
-    token = create_access_token(user.id, user.is_admin, user.token_version)
-    return MfaEnforceConfirmResponse(
-        access_token=token, is_admin=user.is_admin, username=user.username, id=user.id, backup_codes=backup_codes
-    )
+    backup_codes = _finish_mfa_setup(user, payload.code, cfg, db, request)
+    session = issue_session_or_challenge(db, user, cfg, request, skip_mfa=True, response=response)
+    return MfaEnforceConfirmResponse(**session.model_dump(), backup_codes=backup_codes)
 
 
-@router.post("/mfa/disable")
-def mfa_disable(payload: MfaDisableRequest, request: Request, db: Session = Depends(get_db), user: User = Depends(require_user)):
-    if not verify_password(payload.password, user.password_hash):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Current password is incorrect")
+@router.post("/mfa/disable", response_model=TokenResponse)
+def mfa_disable(payload: MfaDisableRequest, request: Request, response: Response, db: Session = Depends(get_db), user: User = Depends(require_user)):
+    """Turning MFA off needs the password *and* a current code (SEC-019): a
+    stolen session plus a phished password must not be enough to remove the
+    second factor. Not allowed at all where MFA is mandatory for this user."""
+    cfg = get_settings()
+    if not user.mfa_enabled:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="MFA is not enabled")
+    if mfa_required_for(user, cfg):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Two-factor authentication is mandatory for your account")
+    _check_password_or_fail(db, user, payload.password, request, cfg)
+    if not _check_second_factor(db, user, payload.code):
+        db.commit()
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid code")
 
     user.mfa_enabled = False
     user.mfa_secret = None
     user.mfa_backup_codes = None
+    user.mfa_last_step = None
+    user.token_version += 1  # other sessions were authorised with MFA; end them
     db.commit()
     log_event(db, "MFA_DISABLED", request=request, user_id=user.id)
-    return {"ok": True}
+    return session_for(user, request, response)
 
 
 @router.get("/me")
 def me(user: User = Depends(require_user)):
-    return {"id": user.id, "username": user.username, "is_admin": user.is_admin, "email": user.email, "mfa_enabled": user.mfa_enabled}
+    return {
+        "id": user.id,
+        "username": user.username,
+        "is_admin": user.is_admin,
+        "email": user.email,
+        "mfa_enabled": user.mfa_enabled,
+        "discoverable": user.discoverable,
+        "password_login": user.password_login,
+        "sso": bool(user.oidc_subject),
+    }
+
+
+@router.post("/logout")
+def logout(
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+    creds: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    user: User = Depends(require_user),
+):
+    """Revokes this session's token server-side and clears the session
+    cookie (SEC-017) - previously logging out only forgot the token in the
+    browser, and it stayed valid for its full lifetime."""
+    token = session_token_from(request, creds)
+    if token and not token.startswith("sdk_"):
+        revoke_token(db, decode_token(token))
+    clear_session_cookie(response, request)
+    log_event(db, "LOGOUT", request=request, user_id=user.id)
+    return {"ok": True}
 
 
 @router.post("/change-password", response_model=TokenResponse)
-def change_password(payload: ChangePasswordRequest, request: Request, db: Session = Depends(get_db), user: User = Depends(require_user)):
+def change_password(payload: ChangePasswordRequest, request: Request, response: Response, db: Session = Depends(get_db), user: User = Depends(require_user)):
     cfg = get_settings()
-    if not verify_password(payload.current_password, user.password_hash):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Current password is incorrect")
+    _check_password_or_fail(db, user, payload.current_password, request, cfg)
 
     errors = validate_password(payload.new_password, cfg)
     if errors:
@@ -325,20 +334,18 @@ def change_password(payload: ChangePasswordRequest, request: Request, db: Sessio
     user.token_version += 1
     db.commit()
     log_event(db, "PASSWORD_CHANGED", request=request, user_id=user.id)
-    token = create_access_token(user.id, user.is_admin, user.token_version)
-    return TokenResponse(access_token=token, is_admin=user.is_admin, username=user.username, id=user.id)
+    return session_for(user, request, response)
 
 
 @router.post("/logout-everywhere", response_model=TokenResponse)
-def logout_everywhere(request: Request, db: Session = Depends(get_db), user: User = Depends(require_user)):
+def logout_everywhere(request: Request, response: Response, db: Session = Depends(get_db), user: User = Depends(require_user)):
     """Invalidates every JWT issued for this account before now, including
     the one used to call this endpoint - a fresh replacement is issued and
     returned so the calling device stays logged in."""
     user.token_version += 1
     db.commit()
     log_event(db, "SESSIONS_REVOKED", request=request, user_id=user.id)
-    token = create_access_token(user.id, user.is_admin, user.token_version)
-    return TokenResponse(access_token=token, is_admin=user.is_admin, username=user.username, id=user.id)
+    return session_for(user, request, response)
 
 
 @router.patch("/email")
@@ -353,9 +360,18 @@ def update_email(payload: UpdateEmailRequest, request: Request, db: Session = De
     return {"ok": True, "email": user.email}
 
 
+@router.patch("/discoverable")
+def update_discoverable(payload: UpdateDiscoverableRequest, db: Session = Depends(get_db), user: User = Depends(require_user)):
+    """Opt in or out of the sharing directory (SEC-020)."""
+    user.discoverable = payload.discoverable
+    db.commit()
+    return {"ok": True, "discoverable": user.discoverable}
+
+
 @router.post("/forgot-password")
-def forgot_password(payload: ForgotPasswordRequest, request: Request, db: Session = Depends(get_db)):
+def forgot_password(payload: ForgotPasswordRequest, request: Request, background: BackgroundTasks, db: Session = Depends(get_db)):
     cfg = get_settings()
+    check_rate(request, "forgot", cfg, per_minute=max(1, cfg["rate_limit_per_minute"] // 3))
     if not cfg["smtp_enabled"]:
         return {"message": GENERIC_RESET_MESSAGE}
 
@@ -366,23 +382,21 @@ def forgot_password(payload: ForgotPasswordRequest, request: Request, db: Sessio
         .first()
     )
 
-    # Always return the same generic message whether or not a match was
-    # found, an email is on file, or sending actually succeeded - the
-    # specifics only ever show up in the audit log, never to the caller.
+    # Always the same generic answer, and the email is sent in the background
+    # so response *time* can't reveal whether an account matched either. The
+    # typed identifier is never logged (SEC-016).
     if user is None or not user.email or not user.is_active:
-        log_event(db, "PASSWORD_RESET_REQUESTED", request=request, detail=f"identifier={identifier} (no eligible match)")
+        log_event(db, "PASSWORD_RESET_REQUESTED", request=request, detail="no eligible match")
         return {"message": GENERIC_RESET_MESSAGE}
 
-    now = datetime.datetime.now(datetime.timezone.utc)
+    now = utcnow()
     recent = (
         db.query(PasswordResetToken)
         .filter(PasswordResetToken.user_id == user.id)
         .order_by(PasswordResetToken.created_at.desc())
         .first()
     )
-    if recent and recent.created_at.replace(tzinfo=datetime.timezone.utc) > now - datetime.timedelta(
-        seconds=RESET_TOKEN_RESEND_COOLDOWN_SECONDS
-    ):
+    if recent and recent.created_at > now - datetime.timedelta(seconds=RESET_TOKEN_RESEND_COOLDOWN_SECONDS):
         log_event(db, "PASSWORD_RESET_REQUESTED", request=request, user_id=user.id, detail="throttled")
         return {"message": GENERIC_RESET_MESSAGE}
 
@@ -404,27 +418,34 @@ def forgot_password(payload: ForgotPasswordRequest, request: Request, db: Sessio
 
     base_url = cfg.get("public_base_url") or str(request.base_url).rstrip("/")
     reset_url = f"{base_url}/reset-password?token={raw_token}"
+    user_id, email = user.id, user.email
+    log_event(db, "PASSWORD_RESET_REQUESTED", request=request, user_id=user_id, detail="email queued")
 
-    try:
-        send_password_reset_email(cfg, user.email, reset_url)
-        log_event(db, "PASSWORD_RESET_REQUESTED", request=request, user_id=user.id, detail="email sent")
-    except Exception as e:
-        log_event(db, "PASSWORD_RESET_REQUESTED", request=request, user_id=user.id, detail=f"send failed: {e}")
+    def _send():
+        from app.core.database import SessionLocal
 
+        try:
+            send_password_reset_email(cfg, email, reset_url)
+        except Exception as e:
+            s = SessionLocal()
+            try:
+                # Error class only - SMTP messages can carry server details.
+                log_event(s, "PASSWORD_RESET_EMAIL_FAILED", user_id=user_id, detail=type(e).__name__)
+            finally:
+                s.close()
+
+    background.add_task(_send)
     return {"message": GENERIC_RESET_MESSAGE}
 
 
 @router.post("/reset-password")
 def reset_password(payload: ResetPasswordRequest, request: Request, db: Session = Depends(get_db)):
     cfg = get_settings()
+    check_rate(request, "forgot", cfg)
     reset_token = db.query(PasswordResetToken).filter(PasswordResetToken.token_hash == hash_reset_token(payload.token)).first()
 
-    now = datetime.datetime.now(datetime.timezone.utc)
-    if (
-        reset_token is None
-        or reset_token.used_at is not None
-        or reset_token.expires_at.replace(tzinfo=datetime.timezone.utc) < now
-    ):
+    now = utcnow()
+    if reset_token is None or reset_token.used_at is not None or reset_token.expires_at < now:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This reset link is invalid or has expired")
 
     user = db.get(User, reset_token.user_id)
@@ -446,23 +467,22 @@ def reset_password(payload: ResetPasswordRequest, request: Request, db: Session 
         PasswordResetToken.used_at.is_(None),
     ).delete()
     db.commit()
+    lockout.clear_login_throttles(db, user.id)
 
     log_event(db, "PASSWORD_RESET_VIA_EMAIL", request=request, user_id=user.id)
     return {"ok": True}
 
 
 @router.delete("/me")
-def delete_own_account(request: Request, db: Session = Depends(get_db), user: User = Depends(require_user)):
-    from app.models.api_key import ApiKey
-    from app.models.file_share import FileShare
-
-    # Orphan (don't delete) their files - links already shared should keep working.
-    db.query(FileObject).filter(FileObject.owner_id == user.id).update({"owner_id": None})
-    db.query(FileShare).filter(FileShare.recipient_id == user.id).delete()
-    db.query(FileShare).filter(FileShare.owner_id == user.id).delete()
-    db.query(ApiKey).filter(ApiKey.user_id == user.id).delete()
+def delete_own_account(payload: DeleteAccountRequest, request: Request, db: Session = Depends(get_db), user: User = Depends(require_user)):
+    """Requires the current password, and refuses to remove the last active
+    admin (BUG-003). Files are orphaned, not deleted, so links keep working."""
+    cfg = get_settings()
+    if user.password_login:
+        _check_password_or_fail(db, user, payload.password or "", request, cfg)
+    elif (payload.confirm_username or "") != user.username:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Type your username to confirm")
     user_id = user.id
-    db.delete(user)
-    db.commit()
+    delete_users(db, [user_id])
     log_event(db, "USER_DELETED_SELF", request=request, user_id=user_id)
     return {"ok": True}

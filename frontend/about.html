@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ratatosk - About</title>
+<link rel="stylesheet" href="/static/css/app.css" integrity="sha384-YetmR1azM/OlNBUGGGv1MKgZtyC1WcP/ovrT7LEul6zowoFeQF0lXLeo9qdpRg2x">
+</head>
+<body>
+
+<div id="sd-navbar" class="navbar"></div>
+
+<main class="container-narrow about" style="padding-top:32px; padding-bottom:32px">
+
+  <div class="card">
+    <h2 class="mt-0">About Ratatosk</h2>
+    <p class="about-version">Version <strong id="aboutVersion">…</strong><span id="aboutInstance"></span></p>
+    <p>
+      Ratatosk is a self-hosted, end-to-end encrypted way to send files and messages. Everything is
+      encrypted in your browser before it is uploaded, and decrypted in the recipient's browser after
+      it is downloaded. The server stores and passes along ciphertext, but it can't read your files,
+      their names, or the keys that unlock them.
+    </p>
+    <p class="text-muted small">
+      In Norse mythology, Ratatosk is the squirrel who runs up and down the world tree Yggdrasil,
+      carrying messages between the eagle at the top and the dragon at the roots. He delivers every
+      message without being able to read it - which is exactly the job of this server.
+    </p>
+  </div>
+
+  <div class="card">
+    <h3 class="mt-0">How it works</h3>
+    <ol class="about-steps">
+      <li><strong>Your browser creates a secret for the file.</strong> Either a random 256-bit key, or one
+        derived from a passphrase you choose (PBKDF2-SHA256, 600,000 iterations).</li>
+      <li><strong>It splits that secret in two</strong> (HKDF): an encryption key that never leaves your device,
+        and a separate <em>download token</em>. Knowing the token reveals nothing about the encryption key.</li>
+      <li><strong>The file - including its name and type - is encrypted</strong> with AES-256-GCM in 1&nbsp;MiB segments,
+        so large files never have to fit in memory. Each segment is authenticated, and the segments are chained,
+        so any tampering, reordering or truncation is detected.</li>
+      <li><strong>Only ciphertext is uploaded.</strong> The server keeps a hash of the download token and requires the
+        token before it hands out the file, so someone who only knows a file's address can't download, use up or
+        destroy it.</li>
+      <li><strong>The key travels in the link</strong> after the <code>#</code>. Browsers never send that part of a
+        link to the server. With a passphrase instead, nothing secret is in the link at all - share the passphrase
+        separately.</li>
+    </ol>
+  </div>
+
+  <div class="card">
+    <h3 class="mt-0">What the server can and can't see</h3>
+    <div class="grid grid-2 about-compare">
+      <div>
+        <h4 class="mt-0">Can't see</h4>
+        <ul>
+          <li>File contents</li>
+          <li>File names and types</li>
+          <li>Decryption keys and passphrases</li>
+          <li>Text messages you send</li>
+        </ul>
+      </div>
+      <div>
+        <h4 class="mt-0">Can see</h4>
+        <ul>
+          <li>The encrypted size of each file</li>
+          <li>When files are uploaded and downloaded</li>
+          <li>The declared file extension (used for upload rules)</li>
+          <li>Network addresses, unless the operator turns on the privacy settings</li>
+        </ul>
+      </div>
+    </div>
+    <h4>What you have to trust</h4>
+    <p class="small">
+      Ratatosk runs in your browser, and your browser gets that code from this server. An operator who wanted to
+      (or was forced to) could serve modified code that captures keys - the same limitation every browser-based
+      encryption tool has. If that is part of your threat model, use an instance run by someone you trust, or the
+      command-line client, which encrypts locally without any code from the server. Sharing with another account is
+      end-to-end once the recipient has set up encryption keys. For recipients without keys, the site may fall back
+      to holding that one file's key on the server - the share dialog tells you when that happens.
+    </p>
+    <p class="small">
+      Ratatosk deliberately does <strong>not</strong> scan uploads for viruses: a server that can scan files can also
+      read them. Treat files from people you don't know with the usual care.
+    </p>
+  </div>
+
+  <div class="card" id="verifyCard">
+    <h3 class="mt-0">Verify this instance</h3>
+    <p class="small">
+      Every script on these pages is pinned by a cryptographic hash (Subresource Integrity), and all of them together
+      are summarised by one <em>release digest</em>. This server reports:
+    </p>
+    <p class="small"><strong>Version</strong> <code id="verifyVersion">…</code><br>
+      <strong>Release digest</strong> <code id="verifyDigest" class="break-all">…</code></p>
+    <p class="small text-muted">
+      A page can't truly vouch for itself - a server that changed the code could change this number too. To check
+      independently, compare the digest published for this version in the release notes, or run from your own computer:
+    </p>
+    <pre class="license-text">python cli/ratatosk.py verify <span id="verifyOrigin">https://this-server</span> --expect &lt;published digest&gt;</pre>
+  </div>
+
+  <div class="card">
+    <h3 class="mt-0">Features</h3>
+    <ul class="about-features">
+      <li>Files of any size, streamed - uploads resume after a dropped connection</li>
+      <li>Several files behind one link, or encrypted text messages</li>
+      <li>Expiry times, download limits and burn-after-download</li>
+      <li>Optional passphrase as a second, out-of-band secret</li>
+      <li>Location and author data removed from photos before encryption</li>
+      <li>Request links: anyone can send you files that only you can open - no account needed</li>
+      <li>End-to-end sharing between accounts, with your own encryption keypair</li>
+      <li>Accounts with two-factor authentication, single sign-on (OIDC), API keys and a command-line client</li>
+      <li>Verifiable code: every script pinned by hash, and a <code>ratatosk verify</code> check you run yourself</li>
+      <li>Privacy controls for the operator: zero-log mode, IP masking, timestamp fuzzing</li>
+      <li>No third-party scripts, fonts or trackers - safe to run on an onion service</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h3 class="mt-0">License</h3>
+    <p>
+      Ratatosk is free and open-source software, released under the <strong>MIT License</strong>.
+      Copyright &copy; 2026 Johan Zetterström.
+    </p>
+    <details>
+      <summary>Full license text</summary>
+      <pre class="license-text">Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.</pre>
+    </details>
+    <p class="small text-muted mt-2">
+      Everything the browser runs is part of this project - including the QR-code encoder - so no code is
+      loaded from anywhere else. The server is built with FastAPI, SQLAlchemy, Alembic, PyJWT, bcrypt, pyotp
+      and the Python <code>cryptography</code> package, each under its own open-source license.
+    </p>
+  </div>
+
+</main>
+
+<footer class="app-footer" id="sd-footer"></footer>
+
+<script src="/static/js/theme.js" integrity="sha384-nHvWqFZ1BnneONoX6ZPhrl4VABFF8xIUWBwbhH3cUOnUSiE3adAxGv7hWS2t52O0"></script>
+<script src="/static/js/api.js" integrity="sha384-Y9cUFpIQmvkj2Dod0H9JG7V5GxpTGFAbTZhJLHozPr7aj5lVBXYv/vTl5aw/Wecd"></script>
+<script src="/static/js/util.js" integrity="sha384-8vf+Et4kAE1vlYnPu6eqdHc87s/gPaMgEbQs6hTCrAoVrU/2+gwZsWn0PkQ+uzz9"></script>
+<script src="/static/js/layout.js" integrity="sha384-YuqiK8ghvkemv2WE11QDtksZ8NuCwmK48ous0Fqt2+DdNIy6TJ2nu4YXLJGzij9B"></script>
+<script src="/static/js/toast.js" integrity="sha384-rJf0ghcDDyTSRWuJBh0oIWI5018WpskKKJWc467cQKtx4Ol3ldIt8aL4iZXE6DTG"></script>
+<script src="/static/js/page-about.js" integrity="sha384-yLuu1cQXkCUZWLCxt4SjEHza+lou9E1vhgE6iipNKZJ03/H9MP/KrocUy+BHCbYg"></script>
+</body>
+</html>

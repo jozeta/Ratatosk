@@ -1,3 +1,5 @@
+import time
+
 import pyotp
 
 
@@ -65,7 +67,12 @@ def test_mfa_setup_confirm_and_login_roundtrip(client):
     denied = client.get("/api/auth/me", headers={"Authorization": f"Bearer {mfa_token}"})
     assert denied.status_code == 401
 
-    verify = client.post("/api/auth/mfa/verify", json={"mfa_token": mfa_token, "code": pyotp.TOTP(secret).now()})
+    # The code used to confirm setup is spent (single-use, SEC-014); the user's
+    # next login uses the following time step's code.
+    next_code = pyotp.TOTP(secret).at(time.time() + 30)
+    replay = client.post("/api/auth/mfa/verify", json={"mfa_token": mfa_token, "code": code})
+    assert replay.status_code == 401
+    verify = client.post("/api/auth/mfa/verify", json={"mfa_token": mfa_token, "code": next_code})
     assert verify.status_code == 200
     real_token = verify.json()["access_token"]
 

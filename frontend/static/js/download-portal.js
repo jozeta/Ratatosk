@@ -7,6 +7,8 @@
   const lookupBtn = document.getElementById("lookupBtn");
   const progressWrap = document.getElementById("progressWrap");
   const progressLabel = document.getElementById("progressLabel");
+  const progressBar = document.getElementById("progressBar");
+  const resultView = document.getElementById("resultView");
 
   function showAlert(message, type = "danger") {
     window.SDToast.show(message, type);
@@ -27,17 +29,31 @@
     progressLabel.textContent = "Looking up file...";
 
     try {
-      const meta = await window.SDApi.get(`/api/files/${fileId}/meta`);
+      const meta = await window.SDDownload.fetchMeta(fileId);
       metaInfo.textContent = `${window.SDDownload.humanSize(meta.size_bytes)} · ${window.SDDownload.timeRemaining(meta.expires_at)}`;
 
       const password = meta.requires_password ? secret : null;
       const urlKey = meta.requires_password ? null : secret;
+      if (!window.SDDownload.confirmDestructive(meta)) return;
 
-      progressLabel.textContent = "Downloading...";
-      const result = await window.SDDownload.fetchAndDecrypt(fileId, password, urlKey);
-      progressLabel.textContent = "Decrypted. Saving...";
-      window.SDDownload.saveDecrypted(result);
-      showAlert(`Decrypted and saved "${result.name}".`, "success");
+      progressBar.style.width = "0%";
+      progressLabel.textContent = "Checking key...";
+      const result = await window.SDDownload.fetchAndDecrypt(fileId, password, urlKey, {
+        meta,
+        onProgress: (f) => {
+          progressBar.style.width = `${Math.round(f * 100)}%`;
+          progressLabel.textContent = `Downloading and decrypting... ${Math.round(f * 100)}%`;
+        },
+      });
+      if (result.kind === "text") {
+        await window.SDDownload.renderText(result, resultView);
+      } else if (result.kind === "bundle") {
+        await window.SDDownload.renderBundle(result, resultView);
+      } else {
+        progressLabel.textContent = "Decrypted. Saving...";
+        window.SDDownload.saveDecrypted(result);
+        showAlert(`Decrypted and saved "${result.name}".`, "success");
+      }
     } catch (e) {
       showAlert(e.message || "Lookup failed.");
     } finally {

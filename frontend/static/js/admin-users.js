@@ -58,6 +58,7 @@
   const modalMfaRow = document.getElementById("modalMfaRow");
   const modalMfaStatus = document.getElementById("modalMfaStatus");
   const modalMfaResetBtn = document.getElementById("modalMfaResetBtn");
+  const modalUnlockBtn = document.getElementById("modalUnlockBtn");
 
   let modalMode = "create"; // "create" | "edit"
   let modalTarget = null;
@@ -204,6 +205,16 @@
     }
   });
 
+  modalUnlockBtn.addEventListener("click", async () => {
+    if (!modalTarget) return;
+    try {
+      await window.SDApi.post(`/api/admin/users/${modalTarget.id}/unlock`, {});
+      showAlert(`Login lockouts cleared for "${modalTarget.username}".`, "success");
+    } catch (err) {
+      showAlert(err.message);
+    }
+  });
+
   document.getElementById("newUserBtn").addEventListener("click", openCreateModal);
 
   // ---- List ----
@@ -332,7 +343,7 @@
   document.getElementById("exportUsersBtn").addEventListener("click", async () => {
     try {
       const res = await fetch("/api/admin/users/export", {
-        headers: { Authorization: "Bearer " + window.SDApi.getToken() },
+        headers: { "X-Ratatosk-CSRF": "1" },
       });
       if (!res.ok) { showAlert("Export failed"); return; }
       const blob = await res.blob();

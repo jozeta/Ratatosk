@@ -56,11 +56,18 @@
       btn.className = "btn btn-primary btn-sm";
       btn.textContent = "Decrypt & Download";
       btn.addEventListener("click", async () => {
+        if (!window.SDDownload.confirmDestructive(item)) return;
         btn.disabled = true;
         btn.textContent = "Downloading...";
         try {
-          const { key } = await window.SDApi.get(`/api/files/${item.file_id}/shared-key`);
-          const result = await window.SDDownload.fetchAndDecrypt(item.file_id, null, key);
+          const share = await window.SDApi.get(`/api/files/${item.file_id}/shared-key`);
+          // End-to-end shares are wrapped to our own key; only we can open them.
+          const key = share.scheme === "e2e"
+            ? await window.SDKeysUI.openSecret(share.wrapped_key, share.ephemeral_public_key)
+            : share.key;
+          const result = await window.SDDownload.fetchAndDecrypt(item.file_id, null, key, {
+            onProgress: (f) => { btn.textContent = `Downloading ${Math.round(f * 100)}%`; },
+          });
           window.SDDownload.saveDecrypted(result);
           showAlert(`Decrypted and saved "${result.name}".`, "success");
           load();

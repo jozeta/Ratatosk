@@ -69,7 +69,7 @@
     const params = currentFilters();
     params.set("format", format);
     const res = await fetch(`/api/admin/audit/export?${params.toString()}`, {
-      headers: { Authorization: "Bearer " + window.SDApi.getToken() },
+      headers: { "X-Ratatosk-CSRF": "1" },
     });
     if (!res.ok) { showAlert("Export failed"); return; }
     const blob = await res.blob();

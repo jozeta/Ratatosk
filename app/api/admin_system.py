@@ -11,7 +11,9 @@ from app.models.api_key import ApiKey
 from app.models.audit_log import AuditLog
 from app.models.file import FileObject
 from app.models.file_share import FileShare
+from app.models.ops import LoginThrottle, PendingBlobDeletion, RevokedToken, UploadChunk
 from app.models.password_reset_token import PasswordResetToken
+from app.models.upload_session import UploadSession
 from app.models.user import User
 from app.schemas.system import SystemResetRequest, SystemResetResponse
 from app.services import storage_service
@@ -46,15 +48,26 @@ def reset_system(
 
     # Children before parents, even though this app's SQLite engine doesn't
     # enforce FK constraints - keeps this correct if that ever changes.
+    # Collect blob names first: the reset deletes exactly the blobs the
+    # database references (plus queued and staged ones), never "everything
+    # in the directory" (SEC-010).
+    blob_names = [n for (n,) in db.query(FileObject.storage_filename)]
+    blob_names += [n for (n,) in db.query(PendingBlobDeletion.storage_filename)]
+
     db.query(FileShare).delete()
+    db.query(UploadChunk).delete()
+    db.query(PendingBlobDeletion).delete()
+    db.query(LoginThrottle).delete()
+    db.query(RevokedToken).delete()
     db.query(ApiKey).delete()
     db.query(PasswordResetToken).delete()
+    db.query(UploadSession).delete()
     db.query(FileObject).delete()
     db.query(AuditLog).delete()
     db.query(User).delete()
     db.commit()
 
-    storage_service.clear_all_blobs()
+    storage_service.clear_blobs(blob_names)
 
     reset_settings_to_defaults(db)
 
