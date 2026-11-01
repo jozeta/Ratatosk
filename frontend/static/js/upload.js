@@ -641,12 +641,16 @@
     label.appendChild(document.createTextNode(" " + u.username));
     row.appendChild(label);
     userPickerList.appendChild(row);
+    userPickerList.hidden = false;
   }
 
   async function setUpShareSection(fileId, urlKey) {
     shareStatus.textContent = "";
     shareWithUsersSection.style.display = "none";
     userPickerList.innerHTML = "";
+    // An empty bordered list looks broken - hide it until someone is in it
+    // (people who opted into the directory, or added by exact username).
+    userPickerList.hidden = true;
     if (!urlKey || !cfg.enable_user_sharing || !window.SDApi.isLoggedIn()) return;
     try {
       // Only users who chose to be discoverable are listed (SEC-020);

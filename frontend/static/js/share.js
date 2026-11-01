@@ -10,6 +10,7 @@
   const progressBar = document.getElementById("progressBar");
   const progressLabel = document.getElementById("progressLabel");
   const resultView = document.getElementById("resultView");
+  const heading = document.querySelector("#metaCard h2");
 
   function showAlert(message, type = "danger") {
     window.SDToast.show(message, type);
@@ -66,6 +67,8 @@
       });
       if (result.kind === "text") {
         await window.SDDownload.renderText(result, resultView);
+        heading.textContent = "Message";
+        downloadBtn.hidden = true; // nothing to download - the message is shown on the page
         showAlert("Message decrypted.", "success");
       } else if (result.kind === "bundle") {
         await window.SDDownload.renderBundle(result, resultView);
@@ -75,7 +78,7 @@
         window.SDDownload.saveDecrypted(result);
         showAlert(`Decrypted and saved "${result.name}".`, "success");
       }
-      downloadBtn.style.display = meta.burn_after_download ? "none" : "";
+      if (result.kind !== "text") downloadBtn.style.display = meta.burn_after_download ? "none" : "";
     } catch (e) {
       showAlert(e.message || "Download failed.");
     } finally {

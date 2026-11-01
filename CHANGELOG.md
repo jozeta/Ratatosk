@@ -12,6 +12,20 @@ Finding IDs (e.g. SEC-001) refer to the engineering audit in `docs/AUDIT.md`.
 
 ## [Unreleased]
 
+## [2.1.1] - 2026-11-01
+
+**Release digest:** `439bae11c5ccc087b57ff71e8088224470c581ea37847f4d9391410d71748228`
+
+### Fixed
+- The "Share with specific users" panel no longer shows an empty list box
+  when nobody has opted into the directory; the list appears once someone is
+  listed or added by exact username.
+- A decrypted text message is now labelled "Message", and the leftover
+  "Decrypt & Download" button is hidden.
+
+### Added
+- Screenshots in the README, regenerated with `python docs/screenshots/capture.py`.
+
 ## [2.1.0] - 2026-11-01
 
 **Release digest:** `60dc8b367246c969c5109aab448f104de305fe4e0b462f9682bfe1dee1bd177a`

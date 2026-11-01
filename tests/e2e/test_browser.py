@@ -133,6 +133,9 @@ def test_text_send_shows_inline(base, page, browser):
     other.goto(link)
     other.click("#downloadBtn")
     expect(other.locator(".text-view")).to_have_text("the wifi password is hunter2")
+    # Labelled as a message, with no download button left over.
+    expect(other.locator("#metaCard h2")).to_have_text("Message")
+    expect(other.locator("#downloadBtn")).to_be_hidden()
 
 
 def test_bundle_one_link_many_files(base, page, browser, tmp_path):

@@ -6,7 +6,7 @@
 
 *Formerly "SecureDrop". Renamed in 2.0 to avoid confusion with the Freedom of the Press Foundation's whistleblower platform of that name. See [CHANGELOG.md](CHANGELOG.md).*
 
-**Current version:** 2.1.0 (see [Versioning](#versioning)).
+**Current version:** 2.1.1 (see [Versioning](#versioning)).
 
 - **Zero-knowledge:** link keys travel in the URL `#fragment`, which browsers never send. Passphrases never leave the browser at all: the server only checks a token derived from them, which can't decrypt anything.
 - **Built for large files:** streaming, segmented encryption keeps memory flat in both directions. Uploads resume after a dropped connection or a page reload, and big downloads stream straight to disk.

@@ -58,9 +58,12 @@ def test_end_to_end_share_between_accounts(base, browser, tmp_path, live_server)
     expect(alice.locator(".file-queue-item .badge", has_text="…")).to_have_count(0)
     alice.click("#uploadBtn")
     expect(alice.locator("#resultModal")).to_be_visible(timeout=30000)
+    # Nobody has opted into the directory: no empty list box is shown...
+    expect(alice.locator("#userPickerList")).to_be_hidden()
     alice.fill("#shareLookupInput", bob_name)
     alice.click("#shareLookupBtn")
     expect(alice.locator("#userPickerList input:checked")).to_have_count(1)
+    expect(alice.locator("#userPickerList")).to_be_visible()  # ...until someone is added
     alice.click("#shareWithUsersBtn")
     expect(alice.locator("#shareStatus")).to_contain_text("(end-to-end)")
 

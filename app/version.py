@@ -5,4 +5,4 @@ break compatibility (file format, API, configuration), MINOR for new
 features, PATCH for fixes. Record every release in CHANGELOG.md. The CLI
 (cli/ratatosk.py) carries the same number; a test keeps them in sync.
 """
-__version__ = "2.1.0"
+__version__ = "2.1.1"
