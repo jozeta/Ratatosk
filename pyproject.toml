@@ -36,4 +36,5 @@ exclude_dirs = ["tests", ".venv", "migrations"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]  # so bare `pytest` (as in CI) can import the app package
 markers = ["e2e: browser/live-server tests (need: python -m playwright install chromium)"]

@@ -13,8 +13,8 @@ jobs:
   python:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
       - name: Install
@@ -41,11 +41,11 @@ jobs:
   javascript:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: "22"
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
       - name: Install
@@ -55,16 +55,16 @@ jobs:
       - name: Lint (eslint + no-unsanitized)
         run: npx eslint frontend/static/js tests/js
       - name: Crypto and metadata tests (incl. CLI/browser interop)
-        run: node --test tests/js/
+        run: node --test "tests/js/*.test.mjs"
 
   docker:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Build image
         run: docker build -t ratatosk:ci .
       - name: Smoke test
         run: |
-          docker run -d --name r -e RATATOSK_SECRET_KEY=ci-only-secret-xxxxxxxxxxxxxxxxxxxxxxxxxxxx -p 8000:8000 --read-only --tmpfs /tmp \
+          docker run -d --name ratatosk-ci -e RATATOSK_SECRET_KEY=ci-only-secret-xxxxxxxxxxxxxxxxxxxxxxxxxxxx -p 8000:8000 --read-only --tmpfs /tmp \
             -v data:/app/data -v storage:/app/storage -e RATATOSK_DATABASE_URL=sqlite:////app/data/r.db ratatosk:ci
-          for i in $(seq 30); do curl -fs localhost:8000/api/health && exit 0; sleep 1; done; docker logs r; exit 1
+          for i in $(seq 30); do curl -fs localhost:8000/api/health && exit 0; sleep 1; done; docker logs ratatosk-ci; exit 1

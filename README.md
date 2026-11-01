@@ -257,7 +257,7 @@ npm install                                  # for eslint (dev only; nothing is 
 
 pytest -q --ignore=tests/e2e                 # unit and API tests
 pytest -q tests/e2e                          # real-browser and live-server concurrency tests
-node --test tests/js/                        # crypto, metadata stripping, CLI <-> browser interop
+node --test "tests/js/*.test.mjs"           # crypto, metadata stripping, CLI <-> browser interop
 
 ruff check app cli tests migrations/env.py   # lint
 mypy app cli                                 # types

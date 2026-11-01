@@ -5,7 +5,7 @@
   "license": "MIT",
   "scripts": {
     "lint": "eslint frontend/static/js tests/js",
-    "test": "node --test tests/js/"
+    "test": "node --test \"tests/js/*.test.mjs\""
   },
   "devDependencies": {
     "@eslint/js": "9.39.1",
