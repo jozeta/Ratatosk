@@ -49,3 +49,6 @@ node_modules/
 
 # Local assistant session notes
 .remember/
+
+# Personal Claude Code settings (not shared)
+.claude/settings.local.json
