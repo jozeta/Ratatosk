@@ -52,3 +52,12 @@ node_modules/
 
 # Personal Claude Code settings (not shared)
 .claude/settings.local.json
+
+# --- Baseline: macOS, Claude Code and secrets ---
+._*
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
