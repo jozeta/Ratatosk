@@ -21,6 +21,7 @@ ignore = [
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S", "B"]
+"docs/**" = ["S"]  # screenshot script: throwaway demo credentials and local subprocesses
 "cli/**" = ["S310"]  # urllib with user-supplied server URL is the CLI's purpose
 "app/services/oidc.py" = ["S310"]  # every URL passes _require_https() first (https, or localhost for development)
 

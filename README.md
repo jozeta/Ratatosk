@@ -18,8 +18,26 @@
 
 ---
 
+## Screenshots
+
+| | |
+|---|---|
+| ![Upload page with metadata status per file](docs/screenshots/upload.png) | ![Share link with QR code after upload](docs/screenshots/share-link.png) |
+| **Upload:** files are encrypted in the browser. Each file shows whether its location and author metadata was removed. | **Share link:** the decryption key is in the part after `#`, which never reaches the server. |
+| ![Recipient's download page](docs/screenshots/download.png) | ![Encrypted text message shown to the recipient](docs/screenshots/text-message.png) |
+| **Download:** the recipient's browser checks the key, then downloads and decrypts. | **Text messages:** shown in the browser, with nothing to download. |
+| ![Request links page with received files](docs/screenshots/request-links.png) | ![Anonymous sender uploading through a request link](docs/screenshots/request-upload.png) |
+| **Request links:** anyone can send you files that only you can open. | **Sending through a request link:** no account needed. |
+| ![Admin settings](docs/screenshots/admin-settings.png) | ![About page in dark mode](docs/screenshots/about-dark.png) |
+| **Admin settings:** every policy is editable live. | **About page** (dark theme): how it works, the trust model, license and version. |
+
+*Screenshots come from a throwaway demo instance with made-up users and files. Regenerate them with `python docs/screenshots/capture.py`.*
+
+---
+
 ## Contents
 
+- [Screenshots](#screenshots)
 - [Features](#features)
 - [How the encryption works](#how-the-encryption-works)
 - [What you have to trust](#what-you-have-to-trust)
