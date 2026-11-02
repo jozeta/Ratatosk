@@ -12,6 +12,11 @@ Finding IDs (e.g. SEC-001) refer to the engineering audit in `docs/AUDIT.md`.
 
 ## [Unreleased]
 
+### Security
+- Development tooling only: force minimatch 11 under ESLint, fixing a
+  medium-severity denial-of-service advisory. ESLint lints the same files with
+  the same results.
+
 ## [2.1.1] - 2026-11-01
 
 **Release digest:** `439bae11c5ccc087b57ff71e8088224470c581ea37847f4d9391410d71748228`
