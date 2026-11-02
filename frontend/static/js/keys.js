@@ -79,7 +79,7 @@
     try {
       return new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv: blob.slice(0, 12) }, key, blob.slice(12)));
     } catch (e) {
-      throw new Error("Wrong encryption passphrase.");
+      throw new Error("Wrong encryption passphrase.", { cause: e });
     }
   }
 
@@ -127,7 +127,7 @@
     try {
       return new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv: blob.slice(0, 12) }, key, blob.slice(12)));
     } catch (e) {
-      throw new Error("This file's key couldn't be unlocked with your keys.");
+      throw new Error("This file's key couldn't be unlocked with your keys.", { cause: e });
     }
   }
 

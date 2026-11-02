@@ -398,7 +398,7 @@
           plain = await crypto.subtle.decrypt(
             { name: "AES-GCM", iv: segmentIv(noncePrefix, i), additionalData: segmentAad(header, isFinal) }, key, sealed);
         } catch (e) {
-          throw new Error("Decryption failed - wrong key/passphrase, or the file is corrupted.");
+          throw new Error("Decryption failed - wrong key/passphrase, or the file is corrupted.", { cause: e });
         }
         await out.push(new Uint8Array(plain));
         if (isFinal) break;
@@ -447,7 +447,7 @@
     try {
       return new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, bytes.slice(offset + 12)));
     } catch (e) {
-      throw new Error("Decryption failed - wrong key/passphrase, or the file is corrupted.");
+      throw new Error("Decryption failed - wrong key/passphrase, or the file is corrupted.", { cause: e });
     }
   }
 
