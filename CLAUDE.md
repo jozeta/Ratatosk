@@ -64,3 +64,8 @@ storage local/S3, audit, email, lockout), `cli/ratatosk.py`, `frontend/` (pages 
 - Frontend: no unsanitized DOM sinks (eslint `no-unsanitized` enforces this).
 - Sessions: HttpOnly `SameSite=Strict` cookie + CSRF header for state-changing requests.
 - Never copy the live `.db` for backups; use `sqlite3 .backup` (WAL mode).
+
+## App standards
+
+This repo follows the app standards in `~/Desktop/code/tools/standards/STANDARDS.md` (rule IDs,
+severities; decisions and waivers in `.claude-standards`). `claude-check --repo .` checks it.
