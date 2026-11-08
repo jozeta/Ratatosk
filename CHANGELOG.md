@@ -12,6 +12,10 @@ Finding IDs (e.g. SEC-001) refer to the engineering audit in `docs/AUDIT.md`.
 
 ## [Unreleased]
 
+- Låda Glass family look (1.1.0, vendored in `frontend/static/vendor/`): frosted-glass cards and navbar
+  on the Låda backdrop, Låda colours, type and radii with the slate-steel accent, in both themes
+  (same `data-theme` toggle and system setting). An admin custom theme still overrides it
+
 ### Security
 - Development tooling only: force minimatch 11 under ESLint, fixing a
   medium-severity denial-of-service advisory. ESLint lints the same files with

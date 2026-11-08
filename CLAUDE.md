@@ -65,6 +65,14 @@ storage local/S3, audit, email, lockout), `cli/ratatosk.py`, `frontend/` (pages 
 - Sessions: HttpOnly `SameSite=Strict` cookie + CSRF header for state-changing requests.
 - Never copy the live `.db` for backups; use `sqlite3 .backup` (WAL mode).
 
+## Look (Låda Glass)
+
+`design=family`: every page loads `static/vendor/lada-glass/<version>/lada-glass.css` and
+`static/css/lada.css` after `app.css`. `lada.css` points Ratatosk's variables (`--paper`, `--surface`,
+`--text`, `--accent`, …) at the Låda tokens (slate-steel accent); the Bootstrap bridge isn't used,
+because Ratatosk has its own `.btn`/`.card`/`.navbar` classes. An admin custom theme (theme.js,
+`data-custom-theme`) still wins. After changing CSS or JS run `python -m app.integrity write`.
+
 ## App standards
 
 This repo follows the app standards in `~/Desktop/code/tools/standards/STANDARDS.md` (rule IDs,

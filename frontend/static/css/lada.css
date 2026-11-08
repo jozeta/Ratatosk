@@ -1,0 +1,36 @@
+/* Låda Glass family look (design=family in .claude-standards). Loaded after app.css: points
+   Ratatosk's variables at the Låda Glass tokens (static/vendor/lada-glass/), which follow the same
+   data-theme attribute and system setting as before. The slate-steel accent fits a zero-knowledge
+   tool. (:root:root:root outranks app.css's :root:not([data-theme="light"]) dark block.) */
+:root:root:root {
+  --paper: var(--lg-bg);
+  --surface: var(--lg-glass);
+  --surface-2: var(--lg-field);
+  --border: var(--lg-line-2);
+  --text: var(--lg-text);
+  --text-muted: var(--lg-muted);
+  --accent: var(--lg-accent);
+  --accent-hover: color-mix(in srgb, var(--lg-accent) 85%, var(--lg-text));
+  --accent-contrast: var(--lg-on-accent);
+  --accent-soft: color-mix(in srgb, var(--lg-accent) 14%, transparent);
+  --success: var(--lg-ok-text);
+  --danger: var(--lg-bad-text);
+  --warning: var(--lg-warn-text);
+  --shadow: var(--lg-shadow);
+  --shadow-float: var(--lg-shadow);
+  --radius: var(--lg-radius-card);
+  --radius-sm: var(--lg-radius-control);
+  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--lg-accent) 35%, transparent);
+  --navbar-bg: var(--lg-glass-strong);
+}
+body { font-family: var(--lg-font); }
+/* The Låda backdrop, unless an admin custom theme (theme.js, data-custom-theme) sets its own colours. */
+html:not([data-custom-theme]) body {
+  background:
+    radial-gradient(700px circle at 0 0, color-mix(in srgb, var(--lg-accent) calc(var(--lg-glow) * 100%), transparent), transparent 70%),
+    radial-gradient(600px circle at 100% 100%, color-mix(in srgb, var(--lg-accent-2) calc(var(--lg-glow-2) * 100%), transparent), transparent 70%),
+    linear-gradient(135deg, var(--lg-backdrop-from), var(--lg-backdrop-to));
+  background-attachment: fixed;
+}
+.card { -webkit-backdrop-filter: var(--lg-blur); backdrop-filter: var(--lg-blur); box-shadow: var(--lg-shadow); }
+.navbar { -webkit-backdrop-filter: var(--lg-blur); backdrop-filter: var(--lg-blur); }
