@@ -1,9 +1,9 @@
-/* Låda Glass 1.1.0: the shared look of Johan's apps (tools/design).
+/* Låda Glass 1.1.1: the shared look of Johan's apps (tools/design).
    Dark charcoal frosted glass is the main theme, light the alternative; compact density; custom
    accents. Values come from Låda (tokens.json); no build step, no dependencies, works from file://.
 
-   Use:   <link rel="stylesheet" href="vendor/lada-glass/1.1.0/lada-glass.css">
-   Bootstrap apps: also <link rel="stylesheet" href="vendor/lada-glass/1.1.0/lada-glass-bootstrap.css"> after it.
+   Use:   <link rel="stylesheet" href="vendor/lada-glass/1.1.1/lada-glass.css">
+   Bootstrap apps: also <link rel="stylesheet" href="vendor/lada-glass/1.1.1/lada-glass-bootstrap.css"> after it.
           <body class="lg lg-backdrop">  … components below …
    Theme:  follows the system; force one with <html data-theme="dark|light">.
    Accent: <html data-accent="arctic-teal" data-accent-2="aurora-green">, or set your own:
