@@ -1,5 +1,5 @@
 /* Låda Glass family look (design=family in .claude-standards). Loaded after app.css: points
-   Ratatosk's variables at the Låda Glass tokens (static/vendor/lada-glass/), which follow the same
+   Ratatosk's variables at the Låda Glass 2.0 tokens (static/vendor/lada-glass/), which follow the same
    data-theme attribute and system setting as before. The slate-steel accent fits a zero-knowledge
    tool. (:root:root:root outranks app.css's :root:not([data-theme="light"]) dark block.) */
 :root:root:root {
@@ -34,3 +34,27 @@ html:not([data-custom-theme]) body {
 }
 .card { -webkit-backdrop-filter: var(--lg-blur); backdrop-filter: var(--lg-blur); box-shadow: var(--lg-shadow); }
 .navbar { -webkit-backdrop-filter: var(--lg-blur); backdrop-filter: var(--lg-blur); }
+/* Låda Glass 2.0 surfaces: a faint vertical gradient over the frosted tint, a 1 px glass edge, a soft
+   top light and a layered shadow; the background stops at the inside of the border (padding-box) so
+   the rounded corners stay clean. The primary button is lit (accent gradient, top highlight, glow).
+   Not under an admin custom theme, whose own colours win. */
+html:not([data-custom-theme]) .card,
+html:not([data-custom-theme]) .modal {
+  background-color: var(--lg-glass);
+  background-image: linear-gradient(180deg, var(--lg-glass-fill-top), var(--lg-glass-fill-bottom));
+  background-clip: padding-box;
+  border-color: var(--lg-glass-edge);
+  box-shadow: inset 0 1px 0 var(--lg-glass-highlight), 0 1px 2px color-mix(in srgb, var(--lg-glass-shadow) 25%, transparent),
+              0 10px 28px -12px var(--lg-glass-shadow);
+}
+html:not([data-custom-theme]) .modal { background-color: var(--lg-surface); }
+html:not([data-custom-theme]) .navbar { border-bottom-color: var(--lg-glass-edge); }
+html:not([data-custom-theme]) .btn-primary {
+  border-color: transparent;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--lg-accent) var(--lg-lit-top), var(--lg-text)),
+                                      color-mix(in srgb, var(--lg-accent) var(--lg-lit-bottom), var(--lg-text)));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .28),
+              0 4px 14px -4px color-mix(in srgb, var(--lg-accent) calc(var(--lg-glass-glow) * 170%), transparent);
+}
+html:not([data-custom-theme]) .btn-primary:hover { border-color: transparent; filter: brightness(1.07); }
+html:not([data-custom-theme]) .btn-primary:focus-visible { box-shadow: var(--focus-ring); }

@@ -115,6 +115,10 @@ label .info-icon{margin-top:-2px}
 }
 .card h2, .card h3{margin-top:0}
 .card-header{display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; gap:12px}
+/* Toolbars in a card header wrap on narrow screens instead of widening the page. */
+.card-header{flex-wrap:wrap}
+.card-header > .row{max-width:100%}
+.card-header > .row > *{flex:0 1 auto}
 .grid{display:grid; gap:16px}
 .grid-2{grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
 .row{display:flex; gap:14px; flex-wrap:wrap}
@@ -220,6 +224,9 @@ input:focus, select:focus, textarea:focus{outline:none; border-color:var(--accen
   border-top:1px solid var(--border); display:flex; justify-content:flex-end;
 }
 @media (max-width:760px){
+  /* The navbar grows and wraps on phones instead of clipping its links. */
+  .navbar{height:auto; min-height:58px; flex-wrap:wrap; gap:6px 16px; padding:10px 16px}
+  .navbar nav{gap:6px 16px}
   .settings-shell{flex-direction:column}
   .settings-nav{
     flex:none; width:100%; flex-direction:row; overflow-x:auto; position:static;

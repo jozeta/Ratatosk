@@ -52,7 +52,7 @@ SEGMENT_SIZE = 1024 * 1024
 GCM_TAG_BYTES = 16
 ENC_INFO = b"ratatosk-enc-v1"
 DL_INFO = b"ratatosk-dl-v1"
-__version__ = "2.1.1"  # keep equal to app/version.py (tests/test_version.py checks)
+__version__ = "2.2.0"  # keep equal to app/version.py (tests/test_version.py checks)
 USER_AGENT = f"ratatosk-cli/{__version__}"
 
 

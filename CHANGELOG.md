@@ -12,9 +12,22 @@ Finding IDs (e.g. SEC-001) refer to the engineering audit in `docs/AUDIT.md`.
 
 ## [Unreleased]
 
-- Låda Glass family look (1.1.1, vendored in `frontend/static/vendor/`): frosted-glass cards and navbar
-  on the Låda backdrop, Låda colours, type and radii with the slate-steel accent, in both themes
-  (same `data-theme` toggle and system setting). An admin custom theme still overrides it
+## [2.2.0] - 2026-11-11
+
+**Release digest:** `8dbb3f12dad1e373c2500f26604a9b7abfc02ba008da3d81b70d8aebc665c3e3`
+
+### Changed
+- Låda Glass 2.0 look (2.0.0, vendored in `frontend/static/vendor/lada-glass/2.0.0/`, replacing
+  1.1.1): rounder corners (cards 12 px, controls 9 px), cards and dialogs with the 2.0 glass surface
+  (faint gradient, 1 px glass edge, top light, layered shadow, clean padding-box corners) and a lit
+  primary button. An admin custom theme still overrides it.
+- Låda Glass family look: frosted-glass cards and navbar on the Låda backdrop, Låda colours, type
+  and radii with the slate-steel accent, in both themes (same `data-theme` toggle and system
+  setting). An admin custom theme still overrides it.
+
+### Fixed
+- Phones: the navbar wraps instead of clipping its links, and the toolbars on the admin Users,
+  Audit and Files pages wrap instead of making the page scroll sideways.
 
 ### Security
 - Development tooling only: force minimatch 11 under ESLint, fixing a
